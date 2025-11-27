@@ -12,14 +12,48 @@
   <style>
     /* Page background image (put image at public/images/bg.png). Uses a stronger overlay for white text readability. */
     body {
-      background-image: url('/images/bg.png');
+      background-color: #111213; /* fallback background color */
+      color: #fff; /* default white text site-wide */
+      position: relative;
+      overflow-x: hidden;
+    }
+    /* Background slideshow layer cycling through bg, bg1, bg2 */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
       background-size: cover;
       background-position: center center;
       background-repeat: no-repeat;
       background-attachment: fixed;
-      /* fallback background color */
-      background-color: #111213;
-      color: #fff; /* default white text site-wide */
+      animation: bgFade 30s ease-in-out infinite, bgZoom 30s ease-in-out infinite;
+      z-index: -2;
+      opacity: 0;
+      transform-origin: center center;
+    }
+    /* Slow fade between three backgrounds with seamless loop back to bg */
+    @keyframes bgFade {
+      0%   { background-image: url('/images/bg.png'); opacity: 0; }
+      6%   { background-image: url('/images/bg.png'); opacity: 1; }
+      30%  { background-image: url('/images/bg.png'); opacity: 1; }
+      34%  { background-image: url('/images/bg.png'); opacity: 0; }
+      36%  { background-image: url('/images/bg1.png'); opacity: 0; }
+      40%  { background-image: url('/images/bg1.png'); opacity: 1; }
+      62%  { background-image: url('/images/bg1.png'); opacity: 1; }
+      66%  { background-image: url('/images/bg1.png'); opacity: 0; }
+      68%  { background-image: url('/images/bg2.png'); opacity: 0; }
+      72%  { background-image: url('/images/bg2.png'); opacity: 1; }
+      94%  { background-image: url('/images/bg2.png'); opacity: 1; }
+      98%  { background-image: url('/images/bg2.png'); opacity: 0; }
+      100% { background-image: url('/images/bg.png'); opacity: 0; }
+    }
+    /* Subtle zoom loop to add depth */
+    @keyframes bgZoom {
+      0%   { transform: scale(1); }
+      25%  { transform: scale(1.04); }
+      50%  { transform: scale(1.02); }
+      75%  { transform: scale(1.06); }
+      100% { transform: scale(1); }
     }
     /* Add a stronger dark overlay so white text stays readable on the page */
     body::before {
@@ -155,9 +189,30 @@
     /* Links default to lighter white for contrast */
     a { color: #ffffff; }
     a.btn, .nav-link { color: rgba(255,255,255,0.95); }
+    /* Toast notification styles */
+    .toast-notification {
+      background: rgba(255, 255, 255, 0.95);
+      color: #000000;
+      padding: 0.85rem 1.25rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      margin-bottom: 0.6rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      font-weight: 500;
+      animation: slideIn 260ms ease-out, slideOut 260ms ease-out 2600ms forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(300px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(300px); opacity: 0; }
+    }
   </style>
 </head>
 <body class="d-flex flex-column min-vh-100">
+  <div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer" style="z-index:2000;"></div>
   <a class="visually-hidden-focusable" href="#main-content">Skip to main content</a>
   <nav class="navbar navbar-expand-sm navbar-dark bg-dark custom-navbar">
     <div class="container-fluid" role="navigation" aria-label="Main navigation">
@@ -218,6 +273,7 @@
                   <% if (user.role === 'admin') { %>
                     <a class="btn btn-outline-light btn-cta" href="/inventory" role="button" title="Go to inventory">Manage Inventory</a>
                     <a class="btn btn-outline-light btn-cta ms-2" href="/admin/users" role="button" title="Manage users and orders">Manage Users</a>
+                    <a class="btn btn-outline-light btn-cta ms-2" href="/admin/audit-log" role="button" title="View all transactions">Audit Log</a>
                   <% } else { %>
                     <a class="btn btn-outline-light btn-cta" href="/shopping" role="button" title="Browse items">Browse All Items</a>
                     <a class="btn btn-outline-light btn-cta ms-2" href="/orders" role="button" title="View your orders">My Orders</a>
@@ -235,6 +291,21 @@
     <small class="small">© <%= new Date().getFullYear() %> — by Saw Kaung Khant Thiha.</small>
   </div>
 </footer>
+<script>
+  (function() {
+    const messages = <%- JSON.stringify(messages || []) %>;
+    const container = document.getElementById('toastContainer');
+    if (!container || !messages.length) return;
+    function showToast(msg) {
+      const toast = document.createElement('div');
+      toast.className = 'toast-notification';
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3200);
+    }
+    messages.forEach(showToast);
+  })();
+</script>
 </body>
 </html>
 

@@ -1,0 +1,22 @@
+/* Shared body theme applied across most pages (exclude index if desired) */
+body.theme-gradient {
+  background: #0d0f12;
+  color: #fff;
+  font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-image:
+    radial-gradient(120% 140% at 15% 10%, rgba(125,243,212,0.08), transparent),
+    radial-gradient(120% 160% at 80% 0%, rgba(109,210,255,0.08), transparent),
+    url('/images/bg.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+body.theme-gradient::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7,7,8,0.82) 0%, rgba(10,12,15,0.88) 40%, rgba(10,12,15,0.92) 100%);
+  z-index: -1;
+  pointer-events: none;
+}

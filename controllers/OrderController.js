@@ -6,21 +6,45 @@ const OrderController = {
     const cart = req.session.cart || [];
     const user = req.session.user;
     if (!cart.length) return res.redirect('/shopping');
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    res.render('checkout', { cart, total, user, messages: req.flash('error') });
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const gstRate = 0.09;
+    const deliveryRate = 0.15;
+    const gst = Number((subtotal * gstRate).toFixed(2));
+    const deliveryFee = Number((subtotal * deliveryRate).toFixed(2));
+    const total = Number((subtotal + gst + deliveryFee).toFixed(2));
+    res.render('checkout', {
+      cart,
+      subtotal,
+      gst,
+      deliveryFee,
+      total,
+      gstRate,
+      deliveryRate,
+      user,
+      messages: req.flash('error')
+    });
   },
 
   placeOrder(req, res) {
     const cart = req.session.cart || [];
     const user = req.session.user;
     const address = (req.body.address || '').trim();
+    const paymentMethod = req.body.paymentMethod || 'card';
+    const cardName = (req.body.cardName || '').trim();
+    const cardNumberRaw = (req.body.cardNumber || '').replace(/\D/g, '');
+    const cardLast4 = cardNumberRaw ? cardNumberRaw.slice(-4) : null;
     if (!cart.length) {
       req.flash('error', 'Your cart is empty.');
       return res.redirect('/shopping');
     }
 
     // Optionally validate stock: keep simple here
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const gstRate = 0.09;
+    const deliveryRate = 0.15;
+    const gst = Number((subtotal * gstRate).toFixed(2));
+    const deliveryFee = Number((subtotal * deliveryRate).toFixed(2));
+    const total = Number((subtotal + gst + deliveryFee).toFixed(2));
     const orderData = { userId: user.id, total, address: address || null };
 
     Order.create(orderData, cart, (err, result) => {
@@ -29,6 +53,13 @@ const OrderController = {
         req.flash('error', err.message || 'Could not place order, please try again.');
         return res.redirect('/checkout');
       }
+      // Stash minimal, non-sensitive payment info in-session for invoice display
+      req.session.orderPayments = req.session.orderPayments || {};
+      req.session.orderPayments[result.orderId] = {
+        method: paymentMethod === 'cash' ? 'Cash on Delivery' : 'Card',
+        cardName: cardName || null,
+        cardLast4: paymentMethod === 'card' ? cardLast4 : null
+      };
       // Clear cart after successful order
       req.session.cart = [];
       return res.redirect(`/orders/${result.orderId}`);
@@ -60,7 +91,8 @@ const OrderController = {
         req.flash('error', 'Access denied');
         return res.redirect('/orders');
       }
-      res.render('orderDetail', { order: data.order, items: data.items, user });
+      const paymentInfo = (req.session.orderPayments && req.session.orderPayments[data.order.id]) || null;
+      res.render('orderDetail', { order: data.order, items: data.items, user, paymentInfo });
     });
   }
 };

@@ -5,9 +5,10 @@ const UserController = {
 
   register(req, res) {
     const db = require('../db');
-    const { username, email, password, address, contact, role } = req.body;
+    const { username, email, password, address, contact } = req.body;
+    const role = 'user';
 
-    if (!username || !email || !password || !address || !contact || !role) {
+    if (!username || !email || !password || !address || !contact) {
       req.flash('error', 'All fields are required.');
       req.flash('formData', req.body);
       return res.redirect('/register');
@@ -56,10 +57,9 @@ const UserController = {
       }
 
       req.session.user = results[0];
-      if (req.session.user.role === 'user') {
-        return res.redirect('/shopping');
-      }
-      return res.redirect('/inventory');
+      req.flash('success', `Welcome back, ${req.session.user.username}!`);
+      // Always land on homepage after login (admin redirects to dashboard there)
+      return res.redirect('/');
     });
   },
 

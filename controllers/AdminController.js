@@ -1,6 +1,14 @@
 const db = require('../db');
 const Order = require('../models/Order');
 
+// Promise wrapper to run SQL with async/await
+const runQuery = (sql, params = []) => new Promise((resolve, reject) => {
+  db.query(sql, params, (err, rows) => {
+    if (err) return reject(err);
+    resolve(rows);
+  });
+});
+
 const AdminController = {
   listUsers(req, res) {
     const sql = 'SELECT id, username, email, role, contact, address FROM users ORDER BY id DESC';
@@ -33,16 +41,249 @@ const AdminController = {
     });
   },
 
+  addUserForm(req, res) {
+    const formData = req.flash('formData')[0];
+    const messages = req.flash('error');
+    const success = req.flash('success');
+    res.render('adminUserForm', {
+      user: req.session.user,
+      targetUser: null,
+      isEdit: false,
+      formData,
+      messages,
+      success
+    });
+  },
+
+  addUser(req, res) {
+    const { username, email, password, address, contact, role } = req.body;
+    const chosenRole = ['admin', 'user'].includes(role) ? role : 'user';
+
+    if (!username || !email || !password || !address || !contact) {
+      req.flash('error', 'All fields are required.');
+      req.flash('formData', req.body);
+      return res.redirect('/admin/users/add');
+    }
+    if (password.length < 6) {
+      req.flash('error', 'Password should be at least 6 characters.');
+      req.flash('formData', req.body);
+      return res.redirect('/admin/users/add');
+    }
+
+    const sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
+    db.query(sql, [username, email, password, address, contact, chosenRole], (err) => {
+      if (err) {
+        console.error('Error adding user:', err);
+        req.flash('error', 'Could not create user.');
+        req.flash('formData', req.body);
+        return res.redirect('/admin/users/add');
+      }
+      req.flash('success', 'User created successfully.');
+      return res.redirect('/admin/users');
+    });
+  },
+
+  editUserForm(req, res) {
+    const userId = req.params.id;
+    const formData = req.flash('formData')[0];
+    const messages = req.flash('error');
+    const success = req.flash('success');
+    const sql = 'SELECT id, username, email, role, contact, address FROM users WHERE id = ?';
+    db.query(sql, [userId], (err, rows) => {
+      if (err) {
+        console.error('Error fetching user:', err);
+        return res.status(500).send('Database error');
+      }
+      if (!rows || !rows.length) return res.status(404).send('User not found');
+      const targetUser = rows[0];
+      const isSelf = req.session.user && req.session.user.id === targetUser.id;
+      if (targetUser.role === 'admin' && !isSelf) {
+        req.flash('error', 'Admin accounts cannot be edited by other admins.');
+        return res.redirect('/admin/users');
+      }
+      res.render('adminUserForm', {
+        user: req.session.user,
+        targetUser,
+        isEdit: true,
+        formData,
+        messages,
+        success
+      });
+    });
+  },
+
+  editUser(req, res) {
+    const userId = req.params.id;
+    const { username, email, password, address, contact, role } = req.body;
+    const chosenRole = ['admin', 'user'].includes(role) ? role : 'user';
+
+    // Prevent editing other admin accounts
+    const guardSql = 'SELECT id, role FROM users WHERE id = ?';
+    db.query(guardSql, [userId], (err, rows) => {
+      if (err) {
+        console.error('Error checking user role:', err);
+        req.flash('error', 'Could not update user.');
+        req.flash('formData', { ...req.body, password: '' });
+        return res.redirect(`/admin/users/${userId}/edit`);
+      }
+      if (!rows || !rows.length) {
+        req.flash('error', 'User not found.');
+        return res.redirect('/admin/users');
+      }
+      const target = rows[0];
+      const isSelf = req.session.user && req.session.user.id === target.id;
+      if (target.role === 'admin' && !isSelf) {
+        req.flash('error', 'Admin accounts cannot be edited by other admins.');
+        return res.redirect('/admin/users');
+      }
+
+      if (!username || !email || !address || !contact) {
+        req.flash('error', 'Username, email, address, and contact are required.');
+        req.flash('formData', { ...req.body, password: '' });
+        return res.redirect(`/admin/users/${userId}/edit`);
+      }
+      if (password && password.length < 6) {
+        req.flash('error', 'Password should be at least 6 characters.');
+        req.flash('formData', { ...req.body, password: '' });
+        return res.redirect(`/admin/users/${userId}/edit`);
+      }
+
+      const setParts = [
+        'username = ?',
+        'email = ?',
+        'address = ?',
+        'contact = ?',
+        'role = ?'
+      ];
+      const params = [username, email, address, contact, chosenRole];
+      if (password) {
+        setParts.push('password = SHA1(?)');
+        params.push(password);
+      }
+      params.push(userId);
+
+      const sql = `UPDATE users SET ${setParts.join(', ')} WHERE id = ?`;
+      db.query(sql, params, (err) => {
+        if (err) {
+          console.error('Error updating user:', err);
+          req.flash('error', 'Could not update user.');
+          req.flash('formData', { ...req.body, password: '' });
+          return res.redirect(`/admin/users/${userId}/edit`);
+        }
+        req.flash('success', 'User updated successfully.');
+        return res.redirect('/admin/users');
+      });
+    });
+
+  },
+
   deleteUser(req, res) {
     const userId = req.params.id;
-    const sql = 'DELETE FROM users WHERE id = ?';
-    db.query(sql, [userId], (err) => {
+    const fetchSql = 'SELECT id, username, role FROM users WHERE id = ?';
+    db.query(fetchSql, [userId], (err, rows) => {
       if (err) {
-        console.error('Error deleting user:', err);
+        console.error('Error checking user for deletion:', err);
         req.flash('error', 'Could not delete user.');
+        return res.redirect('/admin/users');
       }
-      res.redirect('/admin/users');
+      if (!rows || !rows.length) {
+        req.flash('error', 'User not found.');
+        return res.redirect('/admin/users');
+      }
+
+      const target = rows[0];
+      if (target.role === 'admin') {
+        req.flash('error', 'Admin accounts cannot be deleted.');
+        return res.redirect('/admin/users');
+      }
+
+      const sql = 'DELETE FROM users WHERE id = ?';
+      db.query(sql, [userId], (err) => {
+        if (err) {
+          console.error('Error deleting user:', err);
+          req.flash('error', 'Could not delete user.');
+        }
+        res.redirect('/admin/users');
+      });
     });
+  },
+
+  auditLog(req, res) {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const pageSize = 20;
+    const q = (req.query.q || '').trim();
+    Order.getAllWithItemsPaginated(page, pageSize, q, (err, result) => {
+      if (err) {
+        console.error('Error fetching audit log:', err);
+        return res.status(500).send('Database error');
+      }
+      const totalPages = Math.max(1, Math.ceil((result.total || 0) / pageSize));
+      res.render('auditLog', {
+        orders: result.orders,
+        user: req.session.user,
+        page: result.page,
+        totalPages,
+        total: result.total,
+        q
+      });
+    });
+  },
+
+  async dashboard(req, res) {
+    try {
+      const success = req.flash('success');
+      const [
+        usersRow,
+        ordersRow,
+        revenueRow,
+        productsRow,
+        bestProduct,
+        bestCustomer,
+        recentOrders
+      ] = await Promise.all([
+        runQuery('SELECT COUNT(*) AS totalUsers FROM users'),
+        runQuery('SELECT COUNT(*) AS totalOrders FROM orders'),
+        runQuery('SELECT COALESCE(SUM(total),0) AS revenue FROM orders'),
+        runQuery('SELECT COUNT(*) AS totalProducts FROM products'),
+        runQuery(`
+          SELECT productId, productName, SUM(quantity) AS qty, SUM(price * quantity) AS revenue
+          FROM order_items
+          GROUP BY productId, productName
+          ORDER BY qty DESC
+          LIMIT 1
+        `),
+        runQuery(`
+          SELECT u.id, u.username, u.email, COALESCE(SUM(o.total),0) AS totalSpent, COUNT(o.id) AS orderCount
+          FROM orders o
+          JOIN users u ON u.id = o.userId
+          GROUP BY o.userId
+          ORDER BY totalSpent DESC
+          LIMIT 1
+        `),
+        runQuery(`
+          SELECT o.id, o.total, o.createdAt, u.username, u.email
+          FROM orders o
+          JOIN users u ON u.id = o.userId
+          ORDER BY o.createdAt DESC
+          LIMIT 5
+        `)
+      ]);
+
+      const stats = {
+        totalUsers: usersRow[0]?.totalUsers || 0,
+        totalOrders: ordersRow[0]?.totalOrders || 0,
+        revenue: Number(revenueRow[0]?.revenue || 0),
+        totalProducts: productsRow[0]?.totalProducts || 0,
+        bestProduct: bestProduct[0] || null,
+        bestCustomer: bestCustomer[0] || null,
+        recentOrders
+      };
+
+      res.render('adminDashboard', { user: req.session.user, stats, success });
+    } catch (err) {
+      console.error('Error building dashboard:', err);
+      res.status(500).send('Database error');
+    }
   }
 };
 
