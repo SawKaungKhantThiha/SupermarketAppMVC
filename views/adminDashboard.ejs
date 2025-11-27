@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -7,6 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link href="/theme.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <title>Admin Dashboard</title>
   <style>
     .custom-navbar { background-color:transparent !important; padding-top:1.05rem; padding-bottom:1.05rem; min-height:80px; z-index:1030; box-shadow:none; }
@@ -49,9 +50,9 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar"><span class="navbar-toggler-icon"></span></button>
       <div class="collapse navbar-collapse" id="collapsibleNavbar">
         <ul class="navbar-nav ms-auto">
-          <li class="nav-item d-flex align-items-center me-3"><span class="text-light small">Signed in as <strong><%= user.username %></strong></span></li>
-          <li class="nav-item ms-2"><a class="btn btn-outline-light btn-sm btn-cta btn-minimal" href="/logout">Logout</a></li>
-        </ul>
+  <li class="nav-item d-flex align-items-center me-3"><span class="text-light small">Signed in as <strong><%= user.username %></strong></span></li>
+  <li class="nav-item ms-2"><a class="btn btn-outline-light btn-sm btn-cta btn-minimal" href="/logout">Logout</a></li>
+</ul>
       </div>
     </div>
   </nav>
@@ -131,6 +132,14 @@
       </div>
     </div>
 
+    <div class="card-frosted mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="text-white-50 text-uppercase mb-0">Last 7 Days Revenue</h6>
+        <small class="text-white-50">Trailing history</small>
+      </div>
+      <canvas id="revenueChart" height="110"></canvas>
+    </div>
+
     <div class="card-frosted">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="text-white-50 text-uppercase mb-0">Recent Orders</h6>
@@ -167,7 +176,6 @@
       <% } %>
     </div>
   </main>
-
   <script>
     (function() {
       const messages = <%- JSON.stringify(success || []) %>;
@@ -182,7 +190,40 @@
       }
       messages.forEach(showToast);
     })();
+
+    (function() {
+      const ctx = document.getElementById('revenueChart');
+      if (!ctx) return;
+      const revenueData = <%- JSON.stringify(stats.revenueByDay || []) %>;
+      const labels = revenueData.map(r => r.day);
+      const data = revenueData.map(r => r.revenue);
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Revenue',
+            data,
+            borderColor: 'rgba(125,243,212,0.85)',
+            backgroundColor: 'rgba(125,243,212,0.18)',
+            tension: 0.25,
+            fill: true,
+            pointRadius: 3,
+            pointBackgroundColor: '#fff'
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.7)' }, grid: { display: false } },
+            y: { ticks: { color: 'rgba(255,255,255,0.7)' }, grid: { color: 'rgba(255,255,255,0.08)' } }
+          }
+        }
+      });
+    })();
   </script>
+
 
   <footer class="site-footer mt-auto">
   <div class="container text-center">
@@ -192,3 +233,9 @@
 </footer>
 </body>
 </html>
+
+  
+
+
+
+

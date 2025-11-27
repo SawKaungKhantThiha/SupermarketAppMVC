@@ -92,7 +92,19 @@ const OrderController = {
         return res.redirect('/orders');
       }
       const paymentInfo = (req.session.orderPayments && req.session.orderPayments[data.order.id]) || null;
-      res.render('orderDetail', { order: data.order, items: data.items, user, paymentInfo });
+      const subtotal = data.items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
+      const gstRate = 0.09;
+      const deliveryRate = 0.15;
+      const gst = Number((subtotal * gstRate).toFixed(2));
+      const deliveryFee = Number((subtotal * deliveryRate).toFixed(2));
+      const total = Number((subtotal + gst + deliveryFee).toFixed(2));
+      res.render('orderDetail', {
+        order: data.order,
+        items: data.items,
+        user,
+        paymentInfo,
+        breakdown: { subtotal, gstRate, deliveryRate, gst, deliveryFee, total }
+      });
     });
   }
 };
