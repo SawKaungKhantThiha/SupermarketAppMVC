@@ -127,20 +127,7 @@
       border-radius: 999px;
       padding: 0.35rem 0.65rem;
     }
-    .category-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: #fff;
-      border-radius: 999px;
-      padding: 0.25rem 0.65rem;
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-    }
+
     .card-actions .btn {
       flex: 1 1 auto;
     }
@@ -325,6 +312,8 @@
       <div class="row g-3 g-md-4">
         <% if (products && products.length) { %>
           <% for(let i=0; i < products.length; i++) { %>
+            <% const stock = Number(products[i].quantity) || 0; %>
+            <% const isOut = stock <= 0; %>
             <div class="col-12 col-sm-6 col-lg-4 col-xl-3 product-card-wrapper" data-search="<%= (products[i].productName + ' ' + (products[i].category || '')).toLowerCase() %>" data-category="<%= (products[i].category || '').toLowerCase() %>">
               <article class="product-card h-100 d-flex flex-column p-3">
                 <div class="d-flex align-items-start mb-3">
@@ -340,17 +329,19 @@
                 <div class="d-flex align-items-center justify-content-between mb-3">
                   <span class="text-uppercase fw-semibold text-white-50 small">Quantity</span>
                   <div class="quantity-input-group">
-                    <button type="button" onclick="decrementQty('quantity-<%= products[i].id %>')">−</button>
-                    <input type="number" id="quantity-<%= products[i].id %>" name="quantity" value="1" min="1" readonly>
-                    <button type="button" onclick="incrementQty('quantity-<%= products[i].id %>')">+</button>
+                    <button type="button" onclick="decrementQty('quantity-<%= products[i].id %>')" <%= isOut ? 'disabled' : '' %>>-</button>
+                    <input type="number" id="quantity-<%= products[i].id %>" name="quantity" value="<%= isOut ? 0 : 1 %>" min="1" max="<%= stock %>" data-max="<%= stock %>" readonly <%= isOut ? 'disabled' : '' %>>
+                    <button type="button" onclick="incrementQty('quantity-<%= products[i].id %>')" <%= isOut ? 'disabled' : '' %>>+</button>
                   </div>
                 </div>
                 <div class="card-actions mt-auto d-flex gap-2">
                   <form class="flex-grow-1" action="/add-to-cart/<%= products[i].id %>" method="POST" onsubmit="document.getElementById('qty-<%= products[i].id %>').value = document.getElementById('quantity-<%= products[i].id %>').value">
-                    <input type="hidden" name="quantity" id="qty-<%= products[i].id %>" value="1">
-                    <button type="submit" class="btn btn-outline-light btn-sm w-100">Buy</button>
+                    <input type="hidden" name="quantity" id="qty-<%= products[i].id %>" value="<%= isOut ? 0 : 1 %>">
+                    <button type="submit" class="btn btn-outline-light btn-sm w-100" <%= isOut ? 'disabled aria-disabled=\"true\"' : '' %>><%= isOut ? 'Out of Stock' : 'Buy' %></button>
                   </form>
-                  <button type="button" class="btn btn-outline-light btn-sm w-100" onclick="addToCartWithNotification('<%= products[i].id %>', '<%= products[i].productName %>')">Add to Cart</button>
+                  <button type="button" class="btn btn-outline-light btn-sm w-100" onclick="addToCartWithNotification(event, '<%= products[i].id %>', '<%= products[i].productName %>')" <%= isOut ? 'disabled aria-disabled=\"true\"' : '' %> data-out="<%= isOut %>">
+                    <%= isOut ? 'Out of Stock' : 'Add to Cart' %>
+                  </button>
                 </div>
               </article>
             </div>
@@ -373,7 +364,9 @@
       const input = document.getElementById(id);
       if (!input) return;
       const current = parseInt(input.value, 10) || 1;
-      input.value = current + 1;
+      const max = parseInt(input.dataset.max, 10);
+      const next = current + 1;
+      input.value = Number.isFinite(max) ? Math.min(max, next) : next;
     }
 
     function decrementQty(id) {
@@ -395,9 +388,16 @@
     }
 
     // Add to cart via fetch so button feels responsive
-    async function addToCartWithNotification(productId, productName) {
+    async function addToCartWithNotification(evt, productId, productName) {
+      const addButton = evt && evt.currentTarget;
+      if (addButton && addButton.dataset.out === 'true') {
+        return;
+      }
+
       const qtyInput = document.getElementById(`quantity-${productId}`);
-      const quantity = qtyInput ? Math.max(1, parseInt(qtyInput.value, 10) || 1) : 1;
+      const max = qtyInput ? parseInt(qtyInput.dataset.max, 10) : null;
+      const rawQty = qtyInput ? parseInt(qtyInput.value, 10) : 1;
+      const quantity = qtyInput ? Math.max(1, Math.min(max || Infinity, rawQty || 1)) : 1;
       try {
         const res = await fetch(`/add-to-cart/${productId}`, {
           method: 'POST',
