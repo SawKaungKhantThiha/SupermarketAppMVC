@@ -20,3 +20,44 @@ body.theme-gradient::before {
   z-index: -1;
   pointer-events: none;
 }
+
+/* Shared footer styling */
+footer.site-footer {
+  background: #0b0c0d;
+  color: #fff;
+  padding: 2.5rem 0;
+  border-top: 1px solid rgba(255,255,255,0.03);
+}
+footer.site-footer .small {
+  color: #e9ecef;
+}
+
+/* Toast notification (light card on dark theme) */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2000;
+}
+.toast-notification {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 0.9rem 1.25rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  margin-bottom: 0.6rem;
+  border: 1px solid rgba(255,255,255,0.14);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  animation: toastSlideIn 260ms ease-out, toastSlideOut 260ms ease-out 2600ms forwards;
+}
+@keyframes toastSlideIn {
+  from { transform: translateX(320px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes toastSlideOut {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(320px); opacity: 0; }
+}

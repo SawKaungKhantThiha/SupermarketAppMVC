@@ -239,7 +239,8 @@ const AdminController = {
         productsRow,
         bestProduct,
         bestCustomer,
-        recentOrders
+        recentOrders,
+        revenueByDay
       ] = await Promise.all([
         runQuery('SELECT COUNT(*) AS totalUsers FROM users'),
         runQuery('SELECT COUNT(*) AS totalOrders FROM orders'),
@@ -266,6 +267,13 @@ const AdminController = {
           JOIN users u ON u.id = o.userId
           ORDER BY o.createdAt DESC
           LIMIT 5
+        `),
+        runQuery(`
+          SELECT DATE(createdAt) AS day, SUM(total) AS revenue
+          FROM orders
+          WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+          GROUP BY DATE(createdAt)
+          ORDER BY day ASC
         `)
       ]);
 
@@ -276,7 +284,11 @@ const AdminController = {
         totalProducts: productsRow[0]?.totalProducts || 0,
         bestProduct: bestProduct[0] || null,
         bestCustomer: bestCustomer[0] || null,
-        recentOrders
+        recentOrders,
+        revenueByDay: (revenueByDay || []).map(r => ({
+          day: r.day ? new Date(r.day).toISOString().slice(0, 10) : '',
+          revenue: Number(r.revenue || 0)
+        }))
       };
 
       res.render('adminDashboard', { user: req.session.user, stats, success });
