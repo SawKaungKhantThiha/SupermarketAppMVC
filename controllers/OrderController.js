@@ -26,7 +26,7 @@ const OrderController = {
     Order.create(orderData, cart, (err, result) => {
       if (err) {
         console.error('Error creating order:', err);
-        req.flash('error', 'Could not place order, please try again.');
+        req.flash('error', err.message || 'Could not place order, please try again.');
         return res.redirect('/checkout');
       }
       // Clear cart after successful order
