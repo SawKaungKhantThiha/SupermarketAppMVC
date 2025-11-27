@@ -29,7 +29,14 @@ app.use(flash());
 app.use(exposeUser);
 
 // Routes
-app.get('/', (req, res) => res.render('index', { user: req.session.user }));
+app.get('/', (req, res) => {
+  const user = req.session.user;
+  if (user && user.role === 'admin') {
+    return res.redirect('/admin/dashboard');
+  }
+  const success = req.flash('success');
+  return res.render('index', { user, messages: success });
+});
 app.use(productRoutes);
 app.use(userRoutes);
 app.use(cartRoutes);
