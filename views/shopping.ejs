@@ -120,6 +120,33 @@
       font-size: 0.85rem;
       color: rgba(255,255,255,0.75);
     }
+    .category-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff;
+      border-radius: 999px;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .rating-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff;
+      border-radius: 999px;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
     .badge-quantity {
       background: rgba(255,255,255,0.08);
       color: #fff;
@@ -314,19 +341,24 @@
 
     <div class="inventory-grid">
       <div class="row g-3 g-md-4">
+        <% const statsMap = (typeof reviewStatsMap !== 'undefined' && reviewStatsMap) ? reviewStatsMap : {}; %>
         <% if (products && products.length) { %>
           <% for(let i=0; i < products.length; i++) { %>
             <% const stock = Number(products[i].quantity) || 0; %>
             <% const isOut = stock <= 0; %>
+            <% const stat = statsMap[products[i].id] || { avg: 0, count: 0 }; %>
             <div class="col-12 col-sm-6 col-lg-4 col-xl-3 product-card-wrapper" data-search="<%= (products[i].productName + ' ' + (products[i].category || '')).toLowerCase() %>" data-category="<%= (products[i].category || '').toLowerCase() %>">
               <article class="product-card h-100 d-flex flex-column p-3">
                 <div class="d-flex align-items-start mb-3">
                   <img class="product-thumb me-3" src="/images/<%= products[i].image %>" alt="<%= products[i].productName %>" />
                   <div>
                     <a class="product-name d-block" href="/product/<%= products[i].id %>"><%= products[i].productName %></a>
-                    <% if (products[i].category) { %>
-                      <span class="category-pill mt-1"><%= products[i].category %></span>
-                    <% } %>
+                    <div class="d-flex flex-column gap-1 mt-1">
+                      <% if (products[i].category) { %>
+                        <span class="category-pill"><%= products[i].category %></span>
+                      <% } %>
+                      <span class="rating-pill">★ <%= Number(stat.avg || 0).toFixed(1) %> (<%= stat.count || 0 %>)</span>
+                    </div>
                     <div class="product-price">$<%= products[i].price.toFixed(2) %></div>
                   </div>
                 </div>
