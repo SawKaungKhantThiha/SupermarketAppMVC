@@ -111,6 +111,24 @@
       box-shadow: 0 10px 30px rgba(0,0,0,0.35);
       transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
+    .low-stock-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(220,53,69,0.16);
+      color: #f8d7da;
+      border: 1px solid rgba(220,53,69,0.5);
+      border-radius: 999px;
+      padding: 0.25rem 0.6rem;
+      font-weight: 700;
+      font-size: 0.75rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .product-card.low-stock {
+      border-color: rgba(220,53,69,0.65);
+      box-shadow: 0 12px 32px rgba(220,53,69,0.25);
+    }
     .product-card:hover {
       transform: translateY(-4px);
       border-color: rgba(255,255,255,0.12);
@@ -147,6 +165,11 @@
       letter-spacing: 0.02em;
       border-radius: 999px;
       padding: 0.35rem 0.65rem;
+    }
+    .badge-quantity.low {
+      background: rgba(220,53,69,0.16);
+      border: 1px solid rgba(220,53,69,0.4);
+      color: #f8d7da;
     }
     .card-actions .btn {
       flex: 1 1 auto;
@@ -263,6 +286,18 @@
 
   <main id="main-content" class="container flex-grow-1 py-4" role="main">
 
+    <% const lowStockList = (typeof lowStockProducts !== 'undefined' && Array.isArray(lowStockProducts)) ? lowStockProducts : []; %>
+    <% const lowStockLimit = (typeof lowStockThreshold !== 'undefined' && !isNaN(Number(lowStockThreshold))) ? Number(lowStockThreshold) : 10; %>
+
+    <% if (lowStockList && lowStockList.length) { %>
+      <div class="alert alert-warning d-flex justify-content-between align-items-center">
+        <div>
+          <strong><%= lowStockList.length %></strong> product(s) are at or below <%= lowStockLimit %> in stock.
+        </div>
+        <small class="text-muted">Restock soon to avoid stockouts.</small>
+      </div>
+    <% } %>
+
     <div class="inventory-actions mb-3">
       <div class="row g-2 align-items-center">
         <div class="col-12 col-md-6 col-lg-4">
@@ -280,8 +315,9 @@
       <div class="row g-3 g-md-4">
         <% if (products && products.length) { %>
           <% for(let i=0; i < products.length; i++) { %>
+            <% const isLow = (products[i].quantity || 0) <= (lowStockLimit || 0); %>
             <div class="col-12 col-sm-6 col-lg-4 col-xl-3 product-card-wrapper" data-search="<%= (products[i].productName + ' ' + (products[i].category || '')).toLowerCase() %>" data-category="<%= (products[i].category || '').toLowerCase() %>">
-              <article class="product-card h-100 d-flex flex-column p-3">
+              <article class="product-card h-100 d-flex flex-column p-3 <%= isLow ? 'low-stock' : '' %>">
                 <div class="d-flex align-items-start mb-3">
                   <img class="product-thumb me-3" src="/images/<%= products[i].image %>" alt="<%= products[i].productName %>" />
                   <div>
@@ -290,12 +326,17 @@
                     <% if (products[i].category) { %>
                       <span class="category-pill mt-1"><%= products[i].category %></span>
                     <% } %>
+                    <% if (isLow) { %>
+                      <div class="mt-1">
+                        <span class="low-stock-pill">Low stock</span>
+                      </div>
+                    <% } %>
                     <div class="product-price">$<%= products[i].price.toFixed(2) %></div>
                   </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                   <span class="text-uppercase fw-semibold text-white-50 small">Quantity</span>
-                  <span class="badge-quantity"><%= products[i].quantity %></span>
+                  <span class="badge-quantity <%= isLow ? 'low' : '' %>"><%= products[i].quantity %></span>
                 </div>
                 <div class="card-actions mt-auto d-flex gap-2">
                   <a class="btn btn-outline-light btn-sm" href="/updateProduct/<%= products[i].id %>">Edit</a>

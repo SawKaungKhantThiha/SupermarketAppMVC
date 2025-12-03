@@ -1,5 +1,7 @@
 const Product = require('../models/Product');
 
+const LOW_STOCK_THRESHOLD = 10;
+
 /**
  * ProductController (function-based)
  * Methods accept (req, res) and call the Product model methods.
@@ -15,7 +17,16 @@ const ProductController = {
         return res.status(500).send('Database error');
       }
       const user = req.session ? req.session.user : null;
-      return res.render('inventory', { products, user });
+      const lowStockProducts = (products || []).filter(p => {
+        const qty = Number(p.quantity) || 0;
+        return qty <= LOW_STOCK_THRESHOLD;
+      });
+      return res.render('inventory', {
+        products,
+        user,
+        lowStockProducts,
+        lowStockThreshold: LOW_STOCK_THRESHOLD
+      });
     });
   },
 
