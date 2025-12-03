@@ -58,9 +58,11 @@
     const localSubtotal = typeof subtotal !== 'undefined' ? subtotal : (cart || []).reduce((sum, item) => sum + item.price * item.quantity, 0);
     const gstRateLocal = typeof gstRate !== 'undefined' ? gstRate : 0.09;
     const deliveryRateLocal = typeof deliveryRate !== 'undefined' ? deliveryRate : 0.15;
-    const localGst = typeof gst !== 'undefined' ? gst : (localSubtotal * gstRateLocal);
-    const localDelivery = typeof deliveryFee !== 'undefined' ? deliveryFee : (localSubtotal * deliveryRateLocal);
-    const localTotal = typeof total !== 'undefined' ? total : (localSubtotal + localGst + localDelivery);
+    const localDiscount = typeof discount !== 'undefined' ? discount : 0;
+    const discountedSubtotal = Math.max(0, localSubtotal - localDiscount);
+    const localGst = typeof gst !== 'undefined' ? gst : (discountedSubtotal * gstRateLocal);
+    const localDelivery = typeof deliveryFee !== 'undefined' ? deliveryFee : (discountedSubtotal * deliveryRateLocal);
+    const localTotal = typeof total !== 'undefined' ? total : (discountedSubtotal + localGst + localDelivery);
     const itemCount = (cart || []).reduce((sum, item) => sum + item.quantity, 0);
   %>
   <nav class="navbar navbar-expand-sm navbar-dark bg-dark custom-navbar">
@@ -92,10 +94,16 @@
           <% if (messages && messages.length) { %>
             <div class="alert alert-danger py-2"><%= messages[0] %></div>
           <% } %>
+          <% if (promoApplied) { %>
+            <div class="alert alert-success py-2">Promo applied: <%= promoApplied.code %> (-$<%= promoApplied.amount.toFixed(2) %>)</div>
+          <% } %>
           <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
             <span class="summary-chip">Items <strong><%= itemCount %></strong></span>
             <span class="summary-chip">GST <strong>$<%= (gst ?? localGst).toFixed(2) %></strong></span>
             <span class="summary-chip">Delivery <strong>$<%= (deliveryFee ?? localDelivery).toFixed(2) %></strong></span>
+            <% if (localDiscount > 0) { %>
+              <span class="summary-chip text-success">Promo -$<%= localDiscount.toFixed(2) %></span>
+            <% } %>
           </div>
           <% cart.forEach(item => { %>
             <div class="d-flex align-items-center justify-content-between py-2 border-bottom border-secondary border-opacity-25">
@@ -115,6 +123,12 @@
               <span class="fw-bold text-white-50">Subtotal</span>
               <span class="fw-semibold">$<%= (subtotal ?? localSubtotal).toFixed(2) %></span>
             </div>
+            <% if (localDiscount > 0) { %>
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="text-success">Promo applied</span>
+                <span class="text-success">- $<%= localDiscount.toFixed(2) %></span>
+              </div>
+            <% } %>
             <div class="d-flex justify-content-between align-items-center">
               <span class="text-white-50">GST (<%= Math.round(gstRateLocal * 100) %>%)</span>
               <span>$<%= (gst ?? localGst).toFixed(2) %></span>
@@ -133,6 +147,17 @@
       <div class="col-lg-4">
         <div class="card-frosted">
           <h5 class="fw-bold mb-3">Confirm & Place Order</h5>
+          <div class="mb-3">
+            <form method="POST" action="/checkout/promo" class="d-flex gap-2">
+              <input type="text" name="promoCode" class="form-control input-ghost" placeholder="Promo code" value="<%= promoApplied ? promoApplied.code : '' %>">
+              <button type="submit" class="btn btn-outline-light btn-sm">Apply</button>
+            </form>
+            <% if (promoApplied) { %>
+              <form method="POST" action="/checkout/promo/remove" class="mt-2">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Remove promo (<%= promoApplied.code %>)</button>
+              </form>
+            <% } %>
+          </div>
           <form method="POST" action="/checkout">
             <div class="mb-3">
               <div class="form-label mb-1">Name</div>

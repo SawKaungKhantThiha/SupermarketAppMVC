@@ -206,7 +206,17 @@
                   <td><a href="/product/<%= itemId %>"><%= cart[i].productName %></a></td>
                   <td><%= cart[i].category || '-' %></td>
                   <td><img class="product-image" src="/images/<%= cart[i].image %>" alt="<%= cart[i].productName %>" /></td>
-                  <td>$<%= cart[i].price.toFixed(2) %></td>
+                  <td>
+                    <% if (cart[i].discountPercent && Number(cart[i].discountPercent) > 0) { %>
+                      <div>
+                        <span style="text-decoration: line-through; color: #ff6b6b; font-size: 0.9rem;">$<%= Number(cart[i].originalPrice || cart[i].price).toFixed(2) %></span>
+                        <span class="ms-1">$<%= Number(cart[i].price).toFixed(2) %></span>
+                      </div>
+                      <small class="text-white-50">-<%= Number(cart[i].discountPercent).toFixed(2) %>%</small>
+                    <% } else { %>
+                      $<%= Number(cart[i].price).toFixed(2) %>
+                    <% } %>
+                  </td>
                   <td>
                     <form action="/update-cart/<%= itemId %>" method="POST" class="d-inline-flex align-items-center justify-content-center gap-2 update-item-form" data-name="<%= cart[i].productName %>">
                       <input type="number" name="quantity" value="<%= cart[i].quantity %>" min="1" class="form-control form-control-sm text-center" style="width:80px">

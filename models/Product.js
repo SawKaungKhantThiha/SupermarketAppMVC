@@ -24,16 +24,31 @@ const Product = {
 	// Add a new product. `product` should be an object { productName, quantity, price, image }
 	add(product, callback) {
 		const db = require('../db');
-		const sql = 'INSERT INTO products (productName, quantity, price, image, category) VALUES (?, ?, ?, ?, ?)';
-		const params = [product.productName, product.quantity, product.price, product.image || null, product.category || null];
+		const sql = 'INSERT INTO products (productName, quantity, price, discountPercent, image, category) VALUES (?, ?, ?, ?, ?, ?)';
+		const params = [
+			product.productName,
+			product.quantity,
+			product.price,
+			product.discountPercent,
+			product.image || null,
+			product.category || null
+		];
 		db.query(sql, params, (err, result) => callback(err, result));
 	},
 
 	// Update an existing product by ID. `product` same shape as add
 	update(id, product, callback) {
 		const db = require('../db');
-		const sql = 'UPDATE products SET productName = ?, quantity = ?, price = ?, image = ?, category = ? WHERE id = ?';
-		const params = [product.productName, product.quantity, product.price, product.image || null, product.category || null, id];
+		const sql = 'UPDATE products SET productName = ?, quantity = ?, price = ?, discountPercent = ?, image = ?, category = ? WHERE id = ?';
+		const params = [
+			product.productName,
+			product.quantity,
+			product.price,
+			product.discountPercent,
+			product.image || null,
+			product.category || null,
+			id
+		];
 		db.query(sql, params, (err, result) => callback(err, result));
 	},
 

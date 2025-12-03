@@ -299,6 +299,8 @@
   </nav>
 
   <main id="main-content" class="container flex-grow-1 py-4" role="main">
+    <% const reviewAvg = (typeof reviewStats !== 'undefined' && reviewStats && reviewStats.avg) ? Number(reviewStats.avg).toFixed(1) : '0.0'; %>
+    <% const reviewCount = (typeof reviewStats !== 'undefined' && reviewStats && reviewStats.count) ? reviewStats.count : 0; %>
     <% if (product) { %>
       <div class="product-card">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
@@ -307,6 +309,7 @@
             <div class="product-title"><%= product.productName %></div>
             <div class="product-pills">
               <span class="pill"><%= product.category || 'Uncategorized' %></span>
+              <span class="pill">★ <%= reviewAvg %> (<%= reviewCount %>)</span>
             </div>
           </div>
           <div class="price-tag">$<%= product.price.toFixed(2) %></div>
@@ -361,6 +364,77 @@
             <a class="btn btn-outline-light" href="/shopping">Back to Shopping</a>
           <% } %>
         </div>
+      </div>
+
+      <div class="product-card mt-3">
+        <h5 class="mb-2">Reviews</h5>
+
+        <% const reviewErrs = (typeof reviewErrors !== 'undefined' && Array.isArray(reviewErrors)) ? reviewErrors : []; %>
+        <% const reviewMsgs = (typeof reviewSuccess !== 'undefined' && Array.isArray(reviewSuccess)) ? reviewSuccess : []; %>
+        <% if (reviewErrs.length) { %>
+          <div class="alert alert-danger py-2">
+            <% reviewErrs.forEach(function(err) { %>
+              <div><%= err %></div>
+            <% }); %>
+          </div>
+        <% } %>
+        <% if (reviewMsgs.length) { %>
+          <div class="alert alert-success py-2">
+            <% reviewMsgs.forEach(function(msg) { %>
+              <div><%= msg %></div>
+            <% }); %>
+          </div>
+        <% } %>
+
+        <% if (user && user.role !== 'admin') { %>
+          <form class="mb-3" action="/product/<%= product.id %>/reviews" method="POST">
+            <div class="row g-2">
+              <div class="col-12 col-md-4">
+                <label class="form-label text-white-50 small">Rating</label>
+                <select name="rating" class="form-select" required>
+                  <option value="">Select</option>
+                  <% for (let r = 5; r >= 1; r--) { %>
+                    <option value="<%= r %>"><%= r %> Star<%= r > 1 ? 's' : '' %></option>
+                  <% } %>
+                </select>
+              </div>
+              <div class="col-12 col-md-8">
+                <label class="form-label text-white-50 small">Comment</label>
+                <textarea name="comment" class="form-control" rows="2" maxlength="500" required placeholder="Share your experience..."></textarea>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-outline-light btn-sm mt-2">Submit Review</button>
+          </form>
+        <% } else { %>
+          <p class="text-white-50 small">Sign in as a customer to leave a review.</p>
+        <% } %>
+
+        <% const reviewList = (typeof reviews !== 'undefined' && Array.isArray(reviews)) ? reviews : []; %>
+        <% if (reviewList.length) { %>
+          <div class="list-group">
+            <% reviewList.forEach(function(rv) { %>
+              <div class="list-group-item bg-transparent text-white border-secondary">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <div class="fw-semibold"><%= rv.name %></div>
+                    <div class="text-white-50 small"><%= new Date(rv.createdAt).toLocaleString() %></div>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="text-warning fw-semibold">★ <%= rv.rating %></div>
+                    <% if (user && (user.role === 'admin' || (rv.userId && rv.userId === user.id))) { %>
+                      <form action="/product/<%= product.id %>/reviews/<%= rv.id %>/delete" method="POST" onsubmit="return confirm('Delete this review?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                      </form>
+                    <% } %>
+                  </div>
+                </div>
+                <p class="mb-0 mt-1"><%= rv.comment %></p>
+              </div>
+            <% }); %>
+          </div>
+        <% } else { %>
+          <p class="text-white-50 small mb-0">No reviews yet. Be the first to review this product.</p>
+        <% } %>
       </div>
     <% } else { %>
       <div class="product-card text-center">

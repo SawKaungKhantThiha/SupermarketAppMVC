@@ -8,6 +8,8 @@ const router = express.Router();
 router.get('/inventory', checkAuthenticated, checkAdmin, ProductController.inventory);
 router.get('/shopping', checkAuthenticated, ProductController.shopping);
 router.get('/product/:id', checkAuthenticated, ProductController.getById);
+router.post('/product/:id/reviews', checkAuthenticated, ProductController.postReview);
+router.post('/product/:id/reviews/:reviewId/delete', checkAuthenticated, ProductController.deleteReview);
 
 router.get('/addProduct', checkAuthenticated, checkAdmin, ProductController.addForm);
 router.post('/addProduct', checkAuthenticated, checkAdmin, upload.single('image'), ProductController.add);

@@ -1,4 +1,11 @@
 const Product = require('../models/Product');
+const applyDiscount = (product) => {
+  const discount = product.discountPercent;
+  if (discount === null || discount === undefined) return Number(product.price) || 0;
+  const pct = Number(discount);
+  if (!Number.isFinite(pct) || pct <= 0) return Number(product.price) || 0;
+  return Number(product.price) * (1 - pct / 100);
+};
 
 const CartController = {
   view(req, res) {
@@ -22,13 +29,18 @@ const CartController = {
       if (existing) {
         existing.quantity += quantity;
         existing.category = product.category;
+        existing.price = applyDiscount(product);
+        existing.originalPrice = product.price;
+        existing.discountPercent = product.discountPercent;
       } else {
         req.session.cart.push({
           id: product.id,
           productId: product.id,
           productName: product.productName,
           category: product.category,
-          price: product.price,
+          price: applyDiscount(product),
+          originalPrice: product.price,
+          discountPercent: product.discountPercent,
           quantity,
           image: product.image
         });

@@ -83,26 +83,36 @@
     .filter-select option { background: #0f1011; color: #fff; }
 
     .product-card {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 0.8rem;
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      position: relative;
+      background: radial-gradient(140% 160% at 12% 16%, rgba(255,255,255,0.08), rgba(255,255,255,0)),
+                  rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 1rem;
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 20px 48px rgba(0,0,0,0.45);
+      transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+      overflow: hidden;
+    }
+    .product-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0));
+      pointer-events: none;
     }
     .product-card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(255,255,255,0.12);
-      box-shadow: 0 16px 38px rgba(0,0,0,0.4);
+      transform: translateY(-6px);
+      border-color: rgba(255,255,255,0.16);
+      box-shadow: 0 26px 64px rgba(0,0,0,0.55);
     }
     .product-thumb {
-      width: 78px;
-      height: 78px;
+      width: 90px;
+      height: 90px;
       object-fit: cover;
-      border-radius: 0.6rem;
-      border: 1px solid rgba(255,255,255,0.08);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+      border-radius: 0.75rem;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.45);
     }
     .product-name {
       font-weight: 700;
@@ -113,14 +123,15 @@
     .product-name:hover { color: #f8f9fa; }
     .product-price {
       color: #ffffff;
-      font-weight: 700;
-      margin-top: 0.15rem;
+      font-weight: 800;
+      margin-top: 0.35rem;
+      letter-spacing: -0.01em;
     }
     .product-meta {
       font-size: 0.85rem;
       color: rgba(255,255,255,0.75);
     }
-    .category-pill {
+    .category-pill, .rating-pill {
       display: inline-flex;
       align-items: center;
       gap: 0.3rem;
@@ -128,25 +139,14 @@
       border: 1px solid rgba(255,255,255,0.12);
       color: #fff;
       border-radius: 999px;
-      padding: 0.25rem 0.65rem;
+      padding: 0.24rem 0.7rem;
       font-size: 0.7rem;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 0.02em;
       text-transform: uppercase;
+      line-height: 1.15;
     }
-    .rating-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: #fff;
-      border-radius: 999px;
-      padding: 0.25rem 0.65rem;
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
+    .pill-stack { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.25rem; }
     .badge-quantity {
       background: rgba(255,255,255,0.08);
       color: #fff;
@@ -331,9 +331,19 @@
         <div class="col-12 col-md-6 col-lg-4">
           <input id="productSearch" type="search" class="form-control form-control-sm search-box" placeholder="Search products..." aria-label="Search products">
         </div>
-        <div class="col-12 col-md-4 col-lg-3">
+        <div class="col-12 col-md-3 col-lg-3">
           <select id="categoryFilter" class="form-select form-select-sm filter-select" aria-label="Filter by category">
             <option value="">All categories</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-3 col-lg-3">
+          <select id="sortSelect" class="form-select form-select-sm filter-select" aria-label="Sort products">
+            <option value="">Sort: Recommended</option>
+            <option value="price-asc">Price: Ascending</option>
+            <option value="price-desc">Price: Decending</option>
+            <option value="rating-desc">Rating: Decending</option>
+            <option value="rating-asc">Rating: Ascending</option>
+            <option value="best">Best Selling</option>
           </select>
         </div>
       </div>
@@ -347,19 +357,36 @@
             <% const stock = Number(products[i].quantity) || 0; %>
             <% const isOut = stock <= 0; %>
             <% const stat = statsMap[products[i].id] || { avg: 0, count: 0 }; %>
-            <div class="col-12 col-sm-6 col-lg-4 col-xl-3 product-card-wrapper" data-search="<%= (products[i].productName + ' ' + (products[i].category || '')).toLowerCase() %>" data-category="<%= (products[i].category || '').toLowerCase() %>">
+            <% const discountPct = products[i].discountPercent; %>
+            <% const hasDiscount = discountPct !== null && discountPct !== undefined && Number(discountPct) > 0; %>
+            <% const effectivePrice = hasDiscount ? Number(products[i].price) * (1 - Number(discountPct)/100) : Number(products[i].price); %>
+            <div
+              class="col-12 col-sm-6 col-lg-4 col-xl-3 product-card-wrapper"
+              data-search="<%= (products[i].productName + ' ' + (products[i].category || '')).toLowerCase() %>"
+              data-category="<%= (products[i].category || '').toLowerCase() %>"
+              data-price="<%= effectivePrice %>"
+              data-rating="<%= stat.avg || 0 %>"
+              data-sales="<%= stat.count || 0 %>"
+            >
               <article class="product-card h-100 d-flex flex-column p-3">
                 <div class="d-flex align-items-start mb-3">
                   <img class="product-thumb me-3" src="/images/<%= products[i].image %>" alt="<%= products[i].productName %>" />
                   <div>
                     <a class="product-name d-block" href="/product/<%= products[i].id %>"><%= products[i].productName %></a>
-                    <div class="d-flex flex-column gap-1 mt-1">
+                    <div class="pill-stack">
                       <% if (products[i].category) { %>
                         <span class="category-pill"><%= products[i].category %></span>
                       <% } %>
                       <span class="rating-pill">★ <%= Number(stat.avg || 0).toFixed(1) %> (<%= stat.count || 0 %>)</span>
                     </div>
-                    <div class="product-price">$<%= products[i].price.toFixed(2) %></div>
+                    <div class="product-price">
+                      <% if (hasDiscount) { %>
+                        <span style="text-decoration: line-through; color: #ff6b6b; font-size:0.9rem;">$<%= Number(products[i].price).toFixed(2) %></span>
+                        <span class="ms-2">$<%= effectivePrice.toFixed(2) %></span>
+                      <% } else { %>
+                        $<%= Number(products[i].price).toFixed(2) %>
+                      <% } %>
+                    </div>
                   </div>
                 </div>
                 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -448,13 +475,15 @@
       }
     }
 
-    // Client-side filter for product cards by name and category
+    // Client-side filter and sort for product cards by name/category/rating/price
     (function() {
       const searchInput = document.getElementById('productSearch');
       const categorySelect = document.getElementById('categoryFilter');
+      const sortSelect = document.getElementById('sortSelect');
       if (!searchInput || !categorySelect) return;
 
       const cards = Array.from(document.querySelectorAll('.product-card-wrapper'));
+      const gridRow = document.querySelector('.inventory-grid .row');
 
       const categories = new Set();
       cards.forEach(card => {
@@ -468,20 +497,49 @@
         categorySelect.appendChild(opt);
       });
 
-      function filterCards() {
+      function applyFilterAndSort() {
         const term = searchInput.value.trim().toLowerCase();
         const cat = categorySelect.value.trim();
+        const visible = [];
         cards.forEach(card => {
           const termSpace = card.dataset.search || '';
           const cardCat = card.dataset.category || '';
           const matchesTerm = termSpace.includes(term);
           const matchesCategory = !cat || cardCat === cat;
-          card.style.display = (matchesTerm && matchesCategory) ? '' : 'none';
+          const show = matchesTerm && matchesCategory;
+          card.style.display = show ? '' : 'none';
+          if (show) visible.push(card);
         });
+
+        if (sortSelect && gridRow) {
+          const sortVal = sortSelect.value;
+          visible.sort((a, b) => {
+            const priceA = Number(a.dataset.price || 0);
+            const priceB = Number(b.dataset.price || 0);
+            const ratingA = Number(a.dataset.rating || 0);
+            const ratingB = Number(b.dataset.rating || 0);
+            const salesA = Number(a.dataset.sales || 0);
+            const salesB = Number(b.dataset.sales || 0);
+            switch (sortVal) {
+              case 'price-asc': return priceA - priceB;
+              case 'price-desc': return priceB - priceA;
+              case 'rating-desc': return ratingB - ratingA;
+              case 'rating-asc': return ratingA - ratingB;
+              case 'best':
+                if (salesB !== salesA) return salesB - salesA;
+                return ratingB - ratingA;
+              default: return 0;
+            }
+          });
+          visible.forEach(card => gridRow.appendChild(card));
+        }
       }
 
-      searchInput.addEventListener('input', filterCards);
-      categorySelect.addEventListener('change', filterCards);
+      searchInput.addEventListener('input', applyFilterAndSort);
+      categorySelect.addEventListener('change', applyFilterAndSort);
+      if (sortSelect) sortSelect.addEventListener('change', applyFilterAndSort);
+
+      applyFilterAndSort();
     })();
   </script>
 
