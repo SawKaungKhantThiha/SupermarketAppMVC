@@ -1,5 +1,6 @@
 const Product = require('../models/Product');
 const Review = require('../models/Review');
+const db = require('../db');
 
 const LOW_STOCK_THRESHOLD = 10;
 
@@ -51,7 +52,25 @@ const ProductController = {
           console.error('Error fetching review stats:', revErr);
           return res.status(500).send('Database error');
         }
-        return res.render('shopping', { products, user, reviewStatsMap: statsMap });
+        const salesSql = `
+          SELECT productId, SUM(quantity) AS sold
+          FROM order_items
+          GROUP BY productId
+          ORDER BY sold DESC
+          LIMIT 3
+        `;
+        db.query(salesSql, (salesErr, rows) => {
+          if (salesErr) {
+            console.error('Error fetching best sellers by sales:', salesErr);
+          }
+          const salesMap = new Map();
+          (rows || []).forEach(r => salesMap.set(r.productId, Number(r.sold) || 0));
+          const ranked = (products || [])
+            .filter(p => salesMap.has(p.id))
+            .sort((a, b) => (salesMap.get(b.id) || 0) - (salesMap.get(a.id) || 0));
+          const bestSellers = ranked.slice(0, 3);
+          return res.render('shopping', { products, user, reviewStatsMap: statsMap, bestSellers });
+        });
       });
     });
   },

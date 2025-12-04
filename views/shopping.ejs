@@ -114,34 +114,6 @@
       border: 1px solid rgba(255,255,255,0.12);
       box-shadow: 0 10px 24px rgba(0,0,0,0.45);
     }
-    /* Best sellers styling */
-    .best-card {
-      background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
-      border: 1px solid rgba(255,255,255,0.16);
-      border-radius: 1rem;
-      padding: 1rem;
-      box-shadow: 0 26px 60px rgba(0,0,0,0.55);
-    }
-    .best-thumb {
-      width: 110px;
-      height: 110px;
-      object-fit: cover;
-      border-radius: 0.9rem;
-      border: 1px solid rgba(255,255,255,0.16);
-      box-shadow: 0 12px 28px rgba(0,0,0,0.55);
-    }
-    .best-rank {
-      min-width: 32px;
-      height: 32px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      background: linear-gradient(135deg, #7df3d4, #6dd2ff);
-      color: #001018;
-      font-weight: 800;
-      font-size: 0.9rem;
-    }
     .product-name {
       font-weight: 700;
       color: #fff;
@@ -154,6 +126,55 @@
       font-weight: 800;
       margin-top: 0.35rem;
       letter-spacing: -0.01em;
+    }
+    /* Best sellers hero */
+    .best-hero {
+      background: linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 1rem;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+      padding: 1.2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .best-card {
+      background: linear-gradient(145deg, rgba(109,210,255,0.12), rgba(125,243,212,0.05));
+      border: 1px solid rgba(125,210,255,0.25);
+      border-radius: 1rem;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+      position: relative;
+      overflow: hidden;
+    }
+    .best-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .best-hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(120% 140% at 10% 15%, rgba(255,255,255,0.06), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .best-thumb {
+      width: 110px;
+      height: 110px;
+      object-fit: cover;
+      border-radius: 0.9rem;
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: 0 14px 32px rgba(0,0,0,0.55);
+    }
+    .best-card-hover {
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .best-card-hover:hover {
+      transform: translateY(-6px);
+      border-color: rgba(255,255,255,0.24);
+      box-shadow: 0 28px 60px rgba(0,0,0,0.6);
     }
     .product-meta {
       font-size: 0.85rem;
@@ -358,68 +379,63 @@
     <% const topThree = Array.isArray(bestSellers) ? bestSellers : []; %>
     <% if (topThree.length) { %>
       <section class="mb-4">
-        <div class="product-card p-3 p-md-4" style="border-color: rgba(255,255,255,0.18); box-shadow: 0 28px 60px rgba(0,0,0,0.55);">
+        <div class="best-hero">
           <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div>
-              <div class="text-white-50 text-uppercase small fw-bold">Curated Top Picks</div>
+              <div class="text-white-50 text-uppercase small fw-bold">Top Picks</div>
               <h5 class="fw-bold text-white mb-0">Best Sellers</h5>
-            </div>
-            <div class="pill-stack" style="margin-top:0;">
-              <span class="category-pill">Top 3</span>
             </div>
           </div>
           <div class="row g-3 g-md-4">
-          <% for(let i=0; i < topThree.length; i++) { %>
-            <% const prod = topThree[i]; %>
-            <% const stat = (reviewStatsMap && reviewStatsMap[prod.id]) ? reviewStatsMap[prod.id] : { avg: 0, count: 0 }; %>
-            <% const discountPct = prod.discountPercent; %>
-            <% const hasDiscount = discountPct !== null && discountPct !== undefined && Number(discountPct) > 0; %>
-            <% const effectivePrice = hasDiscount ? Number(prod.price) * (1 - Number(discountPct)/100) : Number(prod.price); %>
-            <div class="col-12 col-md-4">
-              <article class="best-card h-100 d-flex flex-column">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                  <span class="best-rank"><%= i + 1 %></span>
-                  <div class="pill-stack" style="margin-top:0;">
-                    <% if (prod.category) { %>
-                      <span class="category-pill"><%= prod.category %></span>
-                    <% } %>
-                    <span class="rating-pill">★ <%= Number(stat.avg || 0).toFixed(1) %> (<%= stat.count || 0 %>)</span>
-                  </div>
-                </div>
-                <div class="d-flex gap-3 align-items-center mb-3">
-                  <img class="best-thumb" src="/images/<%= prod.image %>" alt="<%= prod.productName %>" />
-                  <div class="flex-grow-1">
-                    <a class="product-name d-block" href="/product/<%= prod.id %>"><%= prod.productName %></a>
-                    <div class="product-price">
-                      <% if (hasDiscount) { %>
-                        <span style="text-decoration: line-through; color: #ff6b6b; font-size:0.9rem;">$<%= Number(prod.price).toFixed(2) %></span>
-                        <span class="ms-2">$<%= effectivePrice.toFixed(2) %></span>
-                      <% } else { %>
-                        $<%= Number(prod.price).toFixed(2) %>
-                      <% } %>
+            <% for(let i=0; i < topThree.length; i++) { %>
+              <% const prod = topThree[i]; %>
+              <% const stat = (reviewStatsMap && reviewStatsMap[prod.id]) ? reviewStatsMap[prod.id] : { avg: 0, count: 0 }; %>
+              <% const discountPct = prod.discountPercent; %>
+              <% const hasDiscount = discountPct !== null && discountPct !== undefined && Number(discountPct) > 0; %>
+              <% const effectivePrice = hasDiscount ? Number(prod.price) * (1 - Number(discountPct)/100) : Number(prod.price); %>
+              <div class="col-12 col-md-4">
+                <article class="best-card best-card-hover h-100 d-flex flex-column p-3">
+                  <div class="d-flex align-items-start mb-3">
+                    <img class="best-thumb me-3" src="/images/<%= prod.image %>" alt="<%= prod.productName %>" />
+                    <div>
+                      <a class="product-name d-block" href="/product/<%= prod.id %>"><%= prod.productName %></a>
+                      <div class="pill-stack">
+                        <% if (prod.category) { %>
+                          <span class="category-pill"><%= prod.category %></span>
+                        <% } %>
+                        <span class="rating-pill">★ <%= Number(stat.avg || 0).toFixed(1) %> (<%= stat.count || 0 %>)</span>
+                      </div>
+                      <div class="product-price">
+                        <% if (hasDiscount) { %>
+                          <span style="text-decoration: line-through; color: #ff6b6b; font-size:0.9rem;">$<%= Number(prod.price).toFixed(2) %></span>
+                          <span class="ms-2">$<%= effectivePrice.toFixed(2) %></span>
+                        <% } else { %>
+                          $<%= Number(prod.price).toFixed(2) %>
+                        <% } %>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <span class="text-uppercase fw-semibold text-white-50 small">Quantity</span>
-                  <div class="quantity-input-group">
-                    <button type="button" onclick="decrementQty('quantity-top-<%= prod.id %>')">-</button>
-                    <input type="number" id="quantity-top-<%= prod.id %>" name="quantity" value="1" min="1" max="<%= Number(prod.quantity) || 0 %>" data-max="<%= Number(prod.quantity) || 0 %>" readonly>
-                    <button type="button" onclick="incrementQty('quantity-top-<%= prod.id %>')">+</button>
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="text-uppercase fw-semibold text-white-50 small">Quantity</span>
+                    <div class="quantity-input-group">
+                      <button type="button" onclick="decrementQty('quantity-top-<%= prod.id %>')">-</button>
+                      <input type="number" id="quantity-top-<%= prod.id %>" name="quantity" value="1" min="1" max="<%= Number(prod.quantity) || 0 %>" data-max="<%= Number(prod.quantity) || 0 %>" readonly>
+                      <button type="button" onclick="incrementQty('quantity-top-<%= prod.id %>')">+</button>
+                    </div>
                   </div>
-                </div>
-                <div class="card-actions mt-auto d-flex gap-2">
-                  <form class="flex-grow-1" action="/add-to-cart/<%= prod.id %>" method="POST" onsubmit="document.getElementById('qty-top-<%= prod.id %>').value = document.getElementById('quantity-top-<%= prod.id %>').value">
-                    <input type="hidden" name="quantity" id="qty-top-<%= prod.id %>" value="1">
-                    <button type="submit" class="btn btn-outline-light btn-sm w-100">Buy</button>
-                  </form>
-                  <button type="button" class="btn btn-outline-light btn-sm w-100" onclick="addToCartWithNotification(event, '<%= prod.id %>', '<%= prod.productName %>')">
-                    Add to Cart
-                  </button>
-                </div>
-              </article>
-            </div>
-          <% } %>
+                  <div class="card-actions mt-auto d-flex gap-2">
+                    <form class="flex-grow-1" action="/add-to-cart/<%= prod.id %>" method="POST" onsubmit="document.getElementById('qty-top-<%= prod.id %>').value = document.getElementById('quantity-top-<%= prod.id %>').value">
+                      <input type="hidden" name="quantity" id="qty-top-<%= prod.id %>" value="1">
+                      <button type="submit" class="btn btn-outline-light btn-sm w-100">Buy</button>
+                    </form>
+                    <button type="button" class="btn btn-outline-light btn-sm w-100" onclick="addToCartWithNotification(event, '<%= prod.id %>', '<%= prod.productName %>')">
+                      Add to Cart
+                    </button>
+                  </div>
+                </article>
+              </div>
+            <% } %>
+          </div>
         </div>
       </section>
     <% } %>
