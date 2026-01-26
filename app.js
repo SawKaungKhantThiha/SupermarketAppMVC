@@ -9,7 +9,9 @@ const userRoutes = require('./routes/userRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const { exposeUser } = require('./middleware/auth');
+const { exposeUser, checkAuthenticated } = require('./middleware/auth');
+const paypal = require('./services/paypal');
+const { computeTotals } = require('./services/orderTotals');
 
 const app = express();
 
@@ -17,6 +19,7 @@ const app = express();
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 // Session + flash
 app.use(session({
@@ -42,6 +45,43 @@ app.use(userRoutes);
 app.use(cartRoutes);
 app.use(orderRoutes);
 app.use(adminRoutes);
+
+// PayPal: Create Order
+app.post('/api/paypal/create-order', checkAuthenticated, async (req, res) => {
+  try {
+    const cart = req.session.cart || [];
+    if (!cart.length) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+    const promoAmount = Number(req.session.promoAmount || 0);
+    const promoApplied = promoAmount > 0 ? { amount: promoAmount } : null;
+    const totals = computeTotals(cart, promoApplied);
+    const order = await paypal.createOrder(totals.total);
+    if (order && order.id) {
+      return res.json({ id: order.id });
+    }
+    return res.status(500).json({ error: 'Failed to create PayPal order', details: order });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to create PayPal order', message: err.message });
+  }
+});
+
+// PayPal: Capture Order
+app.post('/api/paypal/capture-order', checkAuthenticated, async (req, res) => {
+  try {
+    const { orderID } = req.body;
+    if (!orderID) {
+      return res.status(400).json({ error: 'Missing PayPal order ID' });
+    }
+    const capture = await paypal.captureOrder(orderID);
+    if (capture.status === 'COMPLETED') {
+      return res.json({ status: 'COMPLETED', details: capture });
+    }
+    return res.status(400).json({ error: 'Payment not completed', details: capture });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to capture PayPal order', message: err.message });
+  }
+});
 
 // Fallback
 app.use((req, res) => res.status(404).send('Page not found'));

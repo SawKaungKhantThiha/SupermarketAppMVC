@@ -43,6 +43,10 @@
       font-weight: 700;
       letter-spacing: 0.02em;
     }
+    .badge-status { display:inline-flex; align-items:center; gap:0.35rem; border-radius:999px; padding:0.25rem 0.6rem; font-weight:700; font-size:0.75rem; letter-spacing:0.02em; }
+    .badge-pending { background: rgba(255,193,7,0.18); border: 1px solid rgba(255,193,7,0.45); color: #ffc107; }
+    .badge-approved { background: rgba(25,135,84,0.18); border: 1px solid rgba(25,135,84,0.45); color: #7be6a6; }
+    .badge-rejected { background: rgba(220,53,69,0.18); border: 1px solid rgba(220,53,69,0.45); color: #ff9aa5; }
   </style>
 </head>
 <body class="theme-gradient d-flex flex-column min-vh-100">
@@ -75,6 +79,12 @@
           <a class="btn btn-outline-light btn-sm" href="/shopping">Shop More</a>
         </div>
       </div>
+      <% if (success && success.length) { %>
+        <div class="alert alert-success py-2"><%= success[0] %></div>
+      <% } %>
+      <% if (error && error.length) { %>
+        <div class="alert alert-danger py-2"><%= error[0] %></div>
+      <% } %>
       <% if (!orders || !orders.length) { %>
         <div class="text-center py-4">
           <p class="text-white fw-semibold mb-1">No orders yet</p>
@@ -93,8 +103,36 @@
                   </div>
                   <span class="badge-soft">$<%= Number(o.total).toFixed(2) %></span>
                 </div>
+                <% if (o.refundStatus) { %>
+                  <div class="order-meta mb-2">
+                    Refund status:
+                    <span class="badge-status <%= o.refundStatus === 'approved' ? 'badge-approved' : (o.refundStatus === 'rejected' ? 'badge-rejected' : 'badge-pending') %>">
+                      <%= o.refundStatus %>
+                    </span>
+                  </div>
+                <% } %>
                 <div class="mt-auto">
-                  <a class="btn btn-outline-light btn-sm w-100" href="/orders/<%= o.id %>">View Receipt</a>
+                  <a class="btn btn-outline-light btn-sm w-100 mb-2" href="/orders/<%= o.id %>">View Receipt</a>
+                  <% if (!o.refundStatus && o.refundEligible) { %>
+                    <form method="POST" action="/orders/<%= o.id %>/refund">
+                      <select name="reason" class="form-select form-select-sm mb-2">
+                        <option value="">Select a reason (optional)</option>
+                        <option value="Wrong item received">Wrong item received</option>
+                        <option value="Damaged item">Damaged item</option>
+                        <option value="Late delivery">Late delivery</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <button type="submit" class="btn btn-outline-warning btn-sm w-100">Request Refund</button>
+                    </form>
+                  <% } else if (!o.refundStatus && !o.refundEligible) { %>
+                    <div class="order-meta">
+                      <% if (o.paymentMethod && o.paymentMethod !== 'PayPal') { %>
+                        Refunds available for PayPal payments only.
+                      <% } else { %>
+                        Refund window ended.
+                      <% } %>
+                    </div>
+                  <% } %>
                 </div>
               </div>
             </div>

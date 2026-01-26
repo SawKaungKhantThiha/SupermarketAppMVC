@@ -93,7 +93,7 @@
         </div>
       <% } %>
 
-      <form action="/register" method="POST" class="mt-3">
+      <form action="/register" method="POST" class="mt-3" id="registerForm">
         <div class="row">
           <div class="col-md-6 mb-3">
             <label for="username" class="form-label">Username</label>
@@ -121,6 +121,7 @@
           </div>
         </div>
 
+        <input type="hidden" name="termsAccepted" id="termsAccepted" value="no">
         <div class="d-flex justify-content-between align-items-center">
           <a href="/login" style="color:rgba(255,255,255,0.8); text-decoration: none;">Already have an account?</a>
           <button type="submit" class="btn btn-outline-light btn-cta">Register</button>
@@ -133,6 +134,131 @@
     <small class="small">© <%= new Date().getFullYear() %> — by Saw Kaung Khant Thiha.</small>
   </div>
 </footer>
+  <style>
+    .terms-modal .modal-content {
+      background: rgba(12,13,14,0.96);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 1rem;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    }
+    .terms-modal .modal-header,
+    .terms-modal .modal-footer {
+      border-color: rgba(255,255,255,0.08);
+    }
+    .terms-modal .section-title {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.65);
+      margin-bottom: 0.25rem;
+    }
+    .terms-modal .section-text {
+      color: rgba(255,255,255,0.72);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .terms-modal .divider {
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+      margin: 0.9rem 0;
+    }
+    .terms-modal .form-check-input {
+      background-color: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.25);
+    }
+    .terms-modal .form-check-input:checked {
+      background-color: #ffffff;
+      border-color: #ffffff;
+    }
+    .terms-modal .form-check-label {
+      color: rgba(255,255,255,0.85);
+    }
+    .terms-modal .btn-ghost {
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      background: transparent;
+    }
+    .terms-modal .btn-ghost:hover {
+      background: rgba(255,255,255,0.06);
+    }
+    .terms-modal .btn-cta-solid {
+      background: #ffffff;
+      color: #000;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .terms-modal .btn-cta-solid:disabled {
+      opacity: 0.5;
+    }
+  </style>
+  <div class="modal fade terms-modal" id="termsModal" tabindex="-1" aria-labelledby="termsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content text-white">
+        <div class="modal-header">
+          <div>
+            <div class="section-title">Supermarket Singapore</div>
+            <h5 class="modal-title mb-0" id="termsModalLabel">Terms & Conditions</h5>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="section-title">Account Registration</div>
+          <p class="section-text">By registering, you confirm that all information provided is accurate and complete. You are responsible for safeguarding your account credentials and for all activity that occurs under your account.</p>
+          <div class="divider"></div>
+          <div class="section-title">Orders & Payments</div>
+          <p class="section-text">All orders are subject to acceptance and product availability. Prices, promotions, and availability may be updated at any time without prior notice. Payment authorization is required to complete an order.</p>
+          <div class="divider"></div>
+          <div class="section-title">Delivery, Cancellations & Refunds</div>
+          <p class="section-text">Delivery timeframes are estimates only and are not guaranteed. Cancellations, returns, and refunds are governed by our published policies and eligibility criteria.</p>
+          <div class="divider"></div>
+          <div class="section-title">Privacy & Data Use</div>
+          <p class="section-text">We collect and use personal information to manage your account, process orders, deliver goods, and provide customer support, in accordance with our Privacy Policy and applicable law.</p>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="agreeTerms">
+            <label class="form-check-label" for="agreeTerms">I have read and agree to the Terms & Conditions and Privacy Policy.</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-cta-solid" id="agreeContinueBtn" disabled>Agree & Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      const form = document.getElementById('registerForm');
+      const termsModalEl = document.getElementById('termsModal');
+      const agreeCheckbox = document.getElementById('agreeTerms');
+      const agreeBtn = document.getElementById('agreeContinueBtn');
+      const termsAcceptedInput = document.getElementById('termsAccepted');
+      if (!form || !termsModalEl || !agreeCheckbox || !agreeBtn || !termsAcceptedInput) return;
+
+      const termsModal = new bootstrap.Modal(termsModalEl, { backdrop: 'static', keyboard: false });
+      let hasAgreed = false;
+
+      form.addEventListener('submit', (e) => {
+        if (hasAgreed) return;
+        e.preventDefault();
+        agreeCheckbox.checked = false;
+        agreeBtn.disabled = true;
+        termsModal.show();
+      });
+
+      agreeCheckbox.addEventListener('change', () => {
+        agreeBtn.disabled = !agreeCheckbox.checked;
+      });
+
+      agreeBtn.addEventListener('click', () => {
+        hasAgreed = true;
+        termsAcceptedInput.value = 'yes';
+        termsModal.hide();
+        form.submit();
+      });
+    })();
+  </script>
 </body>
 </html>
 

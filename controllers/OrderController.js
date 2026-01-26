@@ -1,9 +1,8 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const db = require('../db');
-
-const GST_RATE = 0.09;
-const DELIVERY_RATE = 0.15;
+const { GST_RATE, DELIVERY_RATE, computeTotals } = require('../services/orderTotals');
+const OrderPayment = require('../models/OrderPayment');
 
 const validatePromo = (code, subtotal, callback) => {
   if (!code) return callback(null, null);
@@ -35,16 +34,6 @@ const validatePromo = (code, subtotal, callback) => {
   });
 };
 
-const computeTotals = (cart, promo) => {
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const promoAmount = promo ? promo.amount : 0;
-  const taxableBase = Math.max(0, subtotal - promoAmount);
-  const gst = Number((taxableBase * GST_RATE).toFixed(2));
-  const deliveryFee = Number((taxableBase * DELIVERY_RATE).toFixed(2));
-  const total = Number((taxableBase + gst + deliveryFee).toFixed(2));
-  return { subtotal, promoAmount, gst, deliveryFee, total };
-};
-
 const OrderController = {
   checkoutForm(req, res) {
     const cart = req.session.cart || [];
@@ -65,7 +54,8 @@ const OrderController = {
         deliveryRate: DELIVERY_RATE,
         user,
         messages: req.flash('error'),
-        promoApplied
+        promoApplied,
+        paypalClientId: process.env.PAYPAL_CLIENT_ID || ''
       });
     };
 
@@ -99,6 +89,8 @@ const OrderController = {
     const cardName = (req.body.cardName || '').trim();
     const cardNumberRaw = (req.body.cardNumber || '').replace(/\D/g, '');
     const cardLast4 = cardNumberRaw ? cardNumberRaw.slice(-4) : null;
+    const paypalOrderId = (req.body.paypalOrderId || '').trim();
+    const paypalCaptureId = (req.body.paypalCaptureId || '').trim();
     if (!cart.length) {
       req.flash('error', 'Your cart is empty.');
       return res.redirect('/shopping');
@@ -118,16 +110,25 @@ const OrderController = {
           return res.redirect('/checkout');
         }
         req.session.orderPayments = req.session.orderPayments || {};
-        req.session.orderPayments[result.orderId] = {
-          method: paymentMethod === 'cash' ? 'Cash on Delivery' : 'Card',
-          cardName: cardName || null,
-          cardLast4: paymentMethod === 'card' ? cardLast4 : null,
+        const storedPaymentMethod = paymentMethod === 'cash'
+          ? 'Cash on Delivery'
+          : (paymentMethod === 'paypal' ? 'PayPal' : 'Card');
+        const paymentInfo = {
+          method: storedPaymentMethod,
+          cardName: storedPaymentMethod === 'Card' ? cardName || null : null,
+          cardLast4: storedPaymentMethod === 'Card' ? cardLast4 : null,
+          paypalOrderId: storedPaymentMethod === 'PayPal' ? paypalOrderId || null : null,
+          paypalCaptureId: storedPaymentMethod === 'PayPal' ? paypalCaptureId || null : null,
           promo: promoApplied ? { code: promoApplied.code, amount: promoApplied.amount } : null
         };
-        req.session.cart = [];
-        req.session.promoCode = null;
-        req.session.promoAmount = null;
-        return res.redirect(`/orders/${result.orderId}`);
+        req.session.orderPayments[result.orderId] = paymentInfo;
+        OrderPayment.create(result.orderId, paymentInfo, (err) => {
+          if (err) console.error('Error saving order payment:', err);
+          req.session.cart = [];
+          req.session.promoCode = null;
+          req.session.promoAmount = null;
+          return res.redirect(`/orders/${result.orderId}`);
+        });
       });
     };
 
@@ -158,7 +159,24 @@ const OrderController = {
         console.error('Error fetching orders:', err);
         return res.status(500).send('Database error');
       }
-      res.render('orders', { orders, user });
+      const now = Date.now();
+      const refundWindowMs = 3 * 24 * 60 * 60 * 1000;
+      const decorated = (orders || []).map(order => {
+        const createdAt = new Date(order.createdAt);
+        const withinWindow = now - createdAt.getTime() <= refundWindowMs;
+        const isPaypal = order.paymentMethod === 'PayPal';
+        return {
+          ...order,
+          refundEligible: withinWindow && isPaypal,
+          refundStatus: order.refundStatus || null
+        };
+      });
+      res.render('orders', {
+        orders: decorated,
+        user,
+        success: req.flash('success'),
+        error: req.flash('error')
+      });
     });
   },
 
@@ -176,22 +194,26 @@ const OrderController = {
         req.flash('error', 'Access denied');
         return res.redirect('/orders');
       }
-      const paymentInfo = (req.session.orderPayments && req.session.orderPayments[data.order.id]) || null;
-      const promoInfo = paymentInfo && paymentInfo.promo ? paymentInfo.promo : null;
-      const promoAmount = promoInfo ? Number(promoInfo.amount || 0) : 0;
-      const subtotal = data.items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
-      const taxableBase = Math.max(0, subtotal - promoAmount);
-      const gstRate = GST_RATE;
-      const deliveryRate = DELIVERY_RATE;
-      const gst = Number((taxableBase * gstRate).toFixed(2));
-      const deliveryFee = Number((taxableBase * deliveryRate).toFixed(2));
-      const total = Number((taxableBase + gst + deliveryFee).toFixed(2));
-      res.render('orderDetail', {
-        order: data.order,
-        items: data.items,
-        user,
-        paymentInfo,
-        breakdown: { subtotal, gstRate, deliveryRate, gst, deliveryFee, total, promoAmount, promoCode: promoInfo ? promoInfo.code : null }
+      OrderPayment.getByOrderId(orderId, (err, paymentFromDb) => {
+        if (err) console.error('Error fetching order payment:', err);
+        const paymentInfo = paymentFromDb || (req.session.orderPayments && req.session.orderPayments[data.order.id]) || null;
+        const promoInfo = paymentInfo && paymentInfo.promo ? paymentInfo.promo : null;
+        const promoAmount = promoInfo ? Number(promoInfo.amount || 0) : Number(paymentInfo && paymentInfo.promoAmount ? paymentInfo.promoAmount : 0);
+        const promoCode = promoInfo ? promoInfo.code : (paymentInfo && paymentInfo.promoCode ? paymentInfo.promoCode : null);
+        const subtotal = data.items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
+        const taxableBase = Math.max(0, subtotal - promoAmount);
+        const gstRate = GST_RATE;
+        const deliveryRate = DELIVERY_RATE;
+        const gst = Number((taxableBase * gstRate).toFixed(2));
+        const deliveryFee = Number((taxableBase * deliveryRate).toFixed(2));
+        const total = Number((taxableBase + gst + deliveryFee).toFixed(2));
+        res.render('orderDetail', {
+          order: data.order,
+          items: data.items,
+          user,
+          paymentInfo,
+          breakdown: { subtotal, gstRate, deliveryRate, gst, deliveryFee, total, promoAmount, promoCode }
+        });
       });
     });
   }

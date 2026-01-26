@@ -80,8 +80,24 @@ const Order = {
   },
 
   getByUser(userId, callback) {
-    const sql = 'SELECT * FROM orders WHERE userId = ? ORDER BY createdAt DESC';
+    const sql = `
+      SELECT o.*, rr.status AS refundStatus, rr.requestedAt AS refundRequestedAt, rr.resolvedAt AS refundResolvedAt,
+             op.method AS paymentMethod
+      FROM orders o
+      LEFT JOIN refund_requests rr ON rr.orderId = o.id
+      LEFT JOIN order_payments op ON op.orderId = o.id
+      WHERE o.userId = ?
+      ORDER BY o.createdAt DESC
+    `;
     db.query(sql, [userId], callback);
+  },
+
+  getById(orderId, callback) {
+    const sql = 'SELECT * FROM orders WHERE id = ? LIMIT 1';
+    db.query(sql, [orderId], (err, rows) => {
+      if (err) return callback(err);
+      callback(null, rows && rows[0] ? rows[0] : null);
+    });
   },
 
   getWithItems(orderId, callback) {

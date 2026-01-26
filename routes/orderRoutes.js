@@ -1,6 +1,7 @@
 const express = require('express');
 const OrderController = require('../controllers/OrderController');
 const PromoController = require('../controllers/PromoController');
+const RefundController = require('../controllers/RefundController');
 const { checkAuthenticated } = require('../middleware/auth');
 
 const router = express.Router();
@@ -11,5 +12,6 @@ router.post('/checkout/promo', checkAuthenticated, PromoController.apply);
 router.post('/checkout/promo/remove', checkAuthenticated, PromoController.remove);
 router.get('/orders', checkAuthenticated, OrderController.list);
 router.get('/orders/:id', checkAuthenticated, OrderController.detail);
+router.post('/orders/:id/refund', checkAuthenticated, RefundController.request);
 
 module.exports = router;
