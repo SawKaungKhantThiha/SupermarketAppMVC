@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const OrderPayment = require('../models/OrderPayment');
 const RefundRequest = require('../models/RefundRequest');
 const paypal = require('../services/paypal');
+const Wallet = require('../models/Wallet');
 
 const REFUND_WINDOW_DAYS = 3;
 const refundWindowMs = REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -45,8 +46,11 @@ const RefundController = {
 
         OrderPayment.getByOrderId(orderId, (err, paymentInfo) => {
           if (err) console.error('Error checking payment info:', err);
-          if (!paymentInfo || paymentInfo.method !== 'PayPal' || !paymentInfo.paypalCaptureId) {
-            req.flash('error', 'Refunds are only available for PayPal payments.');
+          const method = paymentInfo ? paymentInfo.method : null;
+          const isPaypal = method === 'PayPal' && paymentInfo.paypalCaptureId;
+          const isWallet = method === 'Wallet';
+          if (!paymentInfo || (!isPaypal && !isWallet)) {
+            req.flash('error', 'Refunds are only available for PayPal or Wallet payments.');
             return res.redirect('/orders');
           }
 
@@ -108,6 +112,16 @@ const RefundController = {
           const refund = await paypal.refundCapture(request.paypalCaptureId, request.total);
           refundId = refund && refund.id ? refund.id : null;
           refundedAmount = request.total;
+        }
+        if (request.method === 'Wallet') {
+          const walletRef = `REFUND-WALLET-${request.orderId}-${requestId}`;
+          await new Promise((resolve, reject) => {
+            Wallet.credit(request.userId, request.total, walletRef, 'refund', (err) => {
+              if (err) return reject(err);
+              refundedAmount = request.total;
+              resolve();
+            });
+          });
         }
         RefundRequest.updateStatus(requestId, 'approved', admin.id, { paypalRefundId: refundId, refundedAmount }, (err) => {
           if (err) {

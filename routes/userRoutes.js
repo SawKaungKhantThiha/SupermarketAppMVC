@@ -6,6 +6,9 @@ const router = express.Router();
 
 router.get('/register', UserController.registerForm);
 router.post('/register', UserController.register);
+router.get('/verify-otp', UserController.verifyOtpForm);
+router.post('/verify-otp', UserController.verifyOtp);
+router.post('/verify-otp/resend', UserController.resendOtp);
 
 router.get('/login', UserController.loginForm);
 router.post('/login', UserController.login);

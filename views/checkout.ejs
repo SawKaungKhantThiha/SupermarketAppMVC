@@ -10,6 +10,9 @@
   <% if (paypalClientId) { %>
   <script src="https://www.paypal.com/sdk/js?client-id=<%= paypalClientId %>&currency=SGD&intent=capture"></script>
   <% } %>
+  <% if (stripePublishableKey) { %>
+  <script src="https://js.stripe.com/v3/"></script>
+  <% } %>
   <title>Checkout</title>
   <style>
     body {
@@ -54,6 +57,8 @@
     .summary-chip { display:inline-flex; align-items:center; gap:0.4rem; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:0.35rem 0.8rem; font-size:0.9rem; }
     .breakdown-box { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:0.9rem; padding:1rem; }
     .total-payable { background:linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04)); border:1px solid rgba(255,255,255,0.18); border-radius:0.75rem; padding:0.75rem 1rem; }
+    .wallet-card { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.12); border-radius:0.85rem; padding:1rem; }
+    .wallet-balance { font-weight:700; font-size:1.1rem; }
   </style>
 </head>
 <body class="theme-gradient d-flex flex-column min-vh-100">
@@ -67,6 +72,9 @@
     const localDelivery = typeof deliveryFee !== 'undefined' ? deliveryFee : (discountedSubtotal * deliveryRateLocal);
     const localTotal = typeof total !== 'undefined' ? total : (discountedSubtotal + localGst + localDelivery);
     const itemCount = (cart || []).reduce((sum, item) => sum + item.quantity, 0);
+    const walletBalanceLocal = typeof walletBalance !== 'undefined' ? Number(walletBalance || 0) : 0;
+    const ethRateLocal = typeof ethRate !== 'undefined' ? Number(ethRate || 0) : 0;
+    const ethAmountLocal = ethRateLocal > 0 ? Number(((total ?? localTotal) / ethRateLocal).toFixed(6)) : 0;
   %>
   <nav class="navbar navbar-expand-sm navbar-dark bg-dark custom-navbar">
     <div class="container-fluid">
@@ -83,6 +91,7 @@
             <span class="text-light small">Signed in as <strong><%= user.username %></strong></span>
           </li>
           <li class="nav-item"><a class="btn btn-outline-light" href="/cart">Back to Cart</a></li>
+          <li class="nav-item ms-2"><a class="btn btn-outline-light" href="/wallet">Wallet</a></li>
           <li class="nav-item ms-2"><a class="btn btn-outline-light" href="/logout">Logout</a></li>
         </ul>
       </div>
@@ -175,14 +184,118 @@
               <textarea class="form-control" rows="3" placeholder="Delivery address (optional)" name="address"><%= user.address || '' %></textarea>
             </div>
             <div class="mb-3">
-              <label class="form-label">PayPal Checkout</label>
-              <div id="paypal-button-container"></div>
-              <small class="text-white-50 d-block mt-2">You will see the PayPal sandbox popup.</small>
-              <div id="paypalStatus" class="text-white-50 small mt-2"></div>
+              <label class="form-label">Payment Method</label>
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                <label class="pill-choice">
+                  <input type="radio" name="paymentOption" value="paypal" checked>
+                  PayPal
+                </label>
+                <label class="pill-choice">
+                  <input type="radio" name="paymentOption" value="nets-qr">
+                  NETS QR
+                </label>
+                <label class="pill-choice">
+                  <input type="radio" name="paymentOption" value="metamask">
+                  Crypto (Sepolia)
+                </label>
+                <label class="pill-choice">
+                  <input type="radio" name="paymentOption" value="stripe-card">
+                  Stripe Card
+                </label>
+                <label class="pill-choice">
+                  <input type="radio" name="paymentOption" value="wallet">
+                  Wallet ($<%= walletBalanceLocal.toFixed(2) %>)
+                </label>
+              </div>
+              <div id="paypal-panel" class="mb-3" style="display:none;">
+                <label class="form-label">PayPal Checkout</label>
+                <div id="paypal-button-container"></div>
+                <small class="text-white-50 d-block mt-2">You will see the PayPal sandbox popup.</small>
+                <div id="paypalStatus" class="text-white-50 small mt-2"></div>
+              </div>
+              <div id="nets-qr-panel" class="mb-3" data-total="<%= (total ?? localTotal).toFixed(2) %>" style="display:none;">
+                <div class="wallet-card">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="fw-semibold">Pay with NETS QR</div>
+                      <small class="text-white-50">Scan using a NETS-enabled banking app.</small>
+                    </div>
+                    <span class="badge-soft">SGD $<%= (total ?? localTotal).toFixed(2) %></span>
+                  </div>
+                  <div class="d-flex align-items-center gap-3 mt-3">
+                    <img src="/images/netsQrLogo.png" alt="NETS QR" style="height:40px;">
+                    <span class="text-white-50 small">You will be redirected to a QR code page to complete payment.</span>
+                  </div>
+                  <button type="button" class="btn btn-outline-light btn-sm mt-3" id="netsQrPayBtn">Generate NETS QR</button>
+                  <div id="netsQrStatus" class="text-white-50 small mt-2"></div>
+                </div>
+              </div>
+              <div id="stripe-card-panel" class="mb-3" data-total="<%= (total ?? localTotal).toFixed(2) %>" style="display:none;">
+                <div class="wallet-card">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="fw-semibold">Pay with Stripe Card</div>
+                      <small class="text-white-50">Enter card details to complete payment.</small>
+                    </div>
+                    <span class="badge-soft">SGD $<%= (total ?? localTotal).toFixed(2) %></span>
+                  </div>
+                  <div id="stripe-card-element" class="mt-3"></div>
+                  <button type="button" class="btn btn-outline-light btn-sm mt-3" id="stripeCardPayBtn">Pay with card</button>
+                  <div id="stripeCardStatus" class="text-white-50 small mt-2"></div>
+                </div>
+              </div>
+              <div id="metamask-panel" class="mb-3" data-address="<%= metamaskAddress %>" data-eth-rate="<%= ethRateLocal %>" data-eth-amount="<%= ethAmountLocal %>" style="display:none;">
+                <div class="wallet-card">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="fw-semibold">Pay with MetaMask</div>
+                      <small class="text-white-50">Sepolia testnet · ETH</small>
+                    </div>
+                    <span class="badge-soft">SGD $<%= (total ?? localTotal).toFixed(2) %></span>
+                  </div>
+                  <div class="mt-3">
+                    <div class="text-white-50 small">Merchant address</div>
+                    <div class="small text-white-50" id="metamaskMerchant"><%= metamaskAddress || 'Set METAMASK_MERCHANT_ADDRESS' %></div>
+                  </div>
+                  <div class="mt-2">
+                    <div class="text-white-50 small">Amount (ETH)</div>
+                    <div class="wallet-balance" id="metamaskAmount"><%= ethAmountLocal ? ethAmountLocal.toFixed(6) : 'Set ETH_SGD_RATE' %></div>
+                    <div class="text-white-50 small mt-1">Rate: <%= ethRateLocal ? `1 ETH ≈ SGD ${ethRateLocal}` : 'Missing ETH_SGD_RATE' %></div>
+                  </div>
+                  <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-outline-light btn-sm" id="metamaskConnectBtn">Connect MetaMask</button>
+                    <button type="button" class="btn btn-outline-light btn-sm" id="metamaskPayBtn">Pay with MetaMask</button>
+                  </div>
+                  <div id="metamaskStatus" class="text-white-50 small mt-2"></div>
+                </div>
+              </div>
+              <div id="wallet-panel" class="mb-3" data-balance="<%= walletBalanceLocal.toFixed(2) %>" data-total="<%= (total ?? localTotal).toFixed(2) %>" style="display:none;">
+                <div class="wallet-card">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div class="fw-semibold">Pay with Wallet</div>
+                      <small class="text-white-50">Instant checkout using your wallet balance.</small>
+                    </div>
+                    <span class="badge-soft">SGD $<%= (total ?? localTotal).toFixed(2) %></span>
+                  </div>
+                  <div class="mt-3">
+                    <div class="text-white-50 small">Available balance</div>
+                    <div class="wallet-balance">$<%= walletBalanceLocal.toFixed(2) %></div>
+                    <div id="walletHint" class="text-white-50 small mt-1"></div>
+                  </div>
+                  <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-outline-light btn-sm" id="walletPayBtn">Pay with wallet</button>
+                    <a class="btn btn-outline-light btn-sm" href="/wallet">Top up</a>
+                  </div>
+                </div>
+              </div>
             </div>
             <input type="hidden" name="paymentMethod" id="paymentMethod" value="paypal">
             <input type="hidden" name="paypalOrderId" id="paypalOrderId" value="">
             <input type="hidden" name="paypalCaptureId" id="paypalCaptureId" value="">
+            <input type="hidden" name="stripePaymentIntentId" id="stripePaymentIntentId" value="">
+            <input type="hidden" name="metamaskTxHash" id="metamaskTxHash" value="">
+            <input type="hidden" name="metamaskFrom" id="metamaskFrom" value="">
           </form>
         </div>
       </div>
@@ -198,11 +311,222 @@
   const paypalStatus = document.getElementById('paypalStatus');
   const paypalOrderInput = document.getElementById('paypalOrderId');
   const paypalCaptureInput = document.getElementById('paypalCaptureId');
+  const stripePaymentIntentInput = document.getElementById('stripePaymentIntentId');
+  const metamaskTxInput = document.getElementById('metamaskTxHash');
+  const metamaskFromInput = document.getElementById('metamaskFrom');
   const paymentMethodInput = document.getElementById('paymentMethod');
   const checkoutForm = document.querySelector('form[action="/checkout"]');
+  const stripeCardPanel = document.getElementById('stripe-card-panel');
+  const stripeCardStatus = document.getElementById('stripeCardStatus');
+  const stripeCardElementMount = document.getElementById('stripe-card-element');
+  const stripeCardPayBtn = document.getElementById('stripeCardPayBtn');
+  const metamaskPanel = document.getElementById('metamask-panel');
+  const metamaskConnectBtn = document.getElementById('metamaskConnectBtn');
+  const metamaskPayBtn = document.getElementById('metamaskPayBtn');
+  const metamaskStatus = document.getElementById('metamaskStatus');
+  const metamaskMerchant = document.getElementById('metamaskMerchant');
+  const metamaskAmount = document.getElementById('metamaskAmount');
+  const walletPanel = document.getElementById('wallet-panel');
+  const walletPayBtn = document.getElementById('walletPayBtn');
+  const walletHint = document.getElementById('walletHint');
+  const paypalPanel = document.getElementById('paypal-panel');
+  const netsPanel = document.getElementById('nets-qr-panel');
+  const netsQrPayBtn = document.getElementById('netsQrPayBtn');
+  const netsQrStatus = document.getElementById('netsQrStatus');
+  const paymentOptions = document.querySelectorAll('input[name="paymentOption"]');
   const setPaymentMethod = (value) => {
     if (paymentMethodInput) paymentMethodInput.value = value;
   };
+  const setCheckoutAction = (method) => {
+    if (!checkoutForm) return;
+    checkoutForm.action = method === 'nets-qr' ? '/nets/qr' : '/checkout';
+  };
+
+  const updateWalletState = () => {
+    if (!walletPanel || !walletPayBtn) return;
+    const balance = Number(walletPanel.dataset.balance || 0);
+    const total = Number(walletPanel.dataset.total || 0);
+    const insufficient = balance < total;
+    walletPayBtn.disabled = insufficient;
+    if (walletHint) {
+      walletHint.textContent = insufficient
+        ? `Need $${(total - balance).toFixed(2)} more to pay with wallet.`
+        : 'Ready to pay with wallet.';
+    }
+  };
+
+  const togglePanels = (method) => {
+    if (walletPanel) walletPanel.style.display = method === 'wallet' ? 'block' : 'none';
+    if (metamaskPanel) metamaskPanel.style.display = method === 'metamask' ? 'block' : 'none';
+    if (stripeCardPanel) stripeCardPanel.style.display = method === 'stripe-card' ? 'block' : 'none';
+    if (paypalPanel) paypalPanel.style.display = method === 'paypal' ? 'block' : 'none';
+    if (netsPanel) netsPanel.style.display = method === 'nets-qr' ? 'block' : 'none';
+    setPaymentMethod(method);
+    setCheckoutAction(method);
+    if (method === 'wallet') updateWalletState();
+  };
+
+  if (paymentOptions.length) {
+    paymentOptions.forEach(option => {
+      option.addEventListener('change', () => togglePanels(option.value));
+    });
+  }
+
+  togglePanels('paypal');
+  updateWalletState();
+
+  let stripeClient = null;
+  let stripeElements = null;
+  let stripeCardElement = null;
+  const stripeKey = '<%= stripePublishableKey || "" %>';
+
+  if (stripeKey && window.Stripe) {
+    stripeClient = Stripe(stripeKey);
+    stripeElements = stripeClient.elements();
+  }
+
+  if (stripeCardElementMount && stripeClient && stripeElements) {
+    stripeCardElement = stripeElements.create('card', { hidePostalCode: true });
+    stripeCardElement.mount('#stripe-card-element');
+  } else if (stripeCardStatus && !stripeClient) {
+    stripeCardStatus.textContent = 'Stripe not configured.';
+  }
+
+  if (stripeCardPayBtn && stripeClient) {
+    stripeCardPayBtn.addEventListener('click', async () => {
+      try {
+        const stripeTotal = Number(stripeCardPanel ? stripeCardPanel.dataset.total : 0);
+        if (!stripeTotal || Number.isNaN(stripeTotal)) {
+          if (stripeCardStatus) stripeCardStatus.textContent = 'Invalid total for Stripe.';
+          return;
+        }
+        if (stripeCardStatus) stripeCardStatus.textContent = 'Processing card payment...';
+        const createRes = await fetch('/api/stripe/create-payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) {
+          if (stripeCardStatus) stripeCardStatus.textContent = createData.error || 'Unable to create PaymentIntent.';
+          return;
+        }
+        const clientSecret = createData.clientSecret;
+        const confirmResult = await stripeClient.confirmCardPayment(clientSecret, {
+          payment_method: {
+            card: stripeCardElement
+          }
+        });
+        if (confirmResult.error) {
+          if (stripeCardStatus) stripeCardStatus.textContent = confirmResult.error.message || 'Payment failed.';
+          return;
+        }
+        const intent = confirmResult.paymentIntent;
+        if (!intent || intent.status !== 'succeeded') {
+          if (stripeCardStatus) stripeCardStatus.textContent = 'Payment not completed.';
+          return;
+        }
+        if (stripePaymentIntentInput) stripePaymentIntentInput.value = intent.id;
+        setPaymentMethod('stripe-card');
+        checkoutForm.submit();
+      } catch (err) {
+        if (stripeCardStatus) stripeCardStatus.textContent = err.message || 'Stripe error occurred.';
+      }
+    });
+  }
+
+  if (walletPayBtn) {
+    walletPayBtn.addEventListener('click', () => {
+      setPaymentMethod('wallet');
+      setCheckoutAction('wallet');
+      checkoutForm.submit();
+    });
+  }
+
+  if (netsQrPayBtn) {
+    netsQrPayBtn.addEventListener('click', () => {
+      if (netsQrStatus) netsQrStatus.textContent = 'Generating NETS QR...';
+      setPaymentMethod('nets-qr');
+      setCheckoutAction('nets-qr');
+      checkoutForm.submit();
+    });
+  }
+
+  const toWeiHex = (amountEth) => {
+    const value = BigInt(Math.round(Number(amountEth) * 1e18));
+    return `0x${value.toString(16)}`;
+  };
+
+  const ensureSepolia = async () => {
+    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+    if (chainId === '0xaa36a7') return true; // Sepolia
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0xaa36a7' }]
+      });
+      return true;
+    } catch (err) {
+      if (metamaskStatus) metamaskStatus.textContent = 'Please switch to Sepolia testnet in MetaMask.';
+      return false;
+    }
+  };
+
+  if (metamaskConnectBtn) {
+    metamaskConnectBtn.addEventListener('click', async () => {
+      if (!window.ethereum) {
+        if (metamaskStatus) metamaskStatus.textContent = 'MetaMask not detected.';
+        return;
+      }
+      try {
+        await ensureSepolia();
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const account = accounts && accounts[0] ? accounts[0] : '';
+        if (metamaskStatus) metamaskStatus.textContent = account ? `Connected: ${account}` : 'No account connected.';
+        if (metamaskFromInput) metamaskFromInput.value = account;
+      } catch (err) {
+        if (metamaskStatus) metamaskStatus.textContent = err.message || 'MetaMask connection failed.';
+      }
+    });
+  }
+
+  if (metamaskPayBtn) {
+    metamaskPayBtn.addEventListener('click', async () => {
+      if (!window.ethereum) {
+        if (metamaskStatus) metamaskStatus.textContent = 'MetaMask not detected.';
+        return;
+      }
+      const merchant = metamaskPanel ? metamaskPanel.dataset.address : '';
+      const ethAmount = metamaskPanel ? Number(metamaskPanel.dataset.ethAmount || 0) : 0;
+      if (!merchant) {
+        if (metamaskStatus) metamaskStatus.textContent = 'Missing merchant address.';
+        return;
+      }
+      if (!ethAmount || Number.isNaN(ethAmount)) {
+        if (metamaskStatus) metamaskStatus.textContent = 'Missing ETH_SGD_RATE to compute amount.';
+        return;
+      }
+      try {
+        const ok = await ensureSepolia();
+        if (!ok) return;
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const from = accounts && accounts[0] ? accounts[0] : '';
+        if (!from) throw new Error('No MetaMask account found.');
+        if (metamaskFromInput) metamaskFromInput.value = from;
+        if (metamaskStatus) metamaskStatus.textContent = 'Sending transaction...';
+        const txHash = await window.ethereum.request({
+          method: 'eth_sendTransaction',
+          params: [{ from, to: merchant, value: toWeiHex(ethAmount) }]
+        });
+        if (metamaskTxInput) metamaskTxInput.value = txHash;
+        if (metamaskStatus) metamaskStatus.textContent = `Transaction sent: ${txHash}`;
+        setPaymentMethod('metamask');
+        checkoutForm.submit();
+      } catch (err) {
+        if (metamaskStatus) metamaskStatus.textContent = err.message || 'MetaMask payment failed.';
+      }
+    });
+  }
 
   if (window.paypal && document.getElementById('paypal-button-container')) {
     paypal.Buttons({

@@ -9,8 +9,11 @@ const userRoutes = require('./routes/userRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const walletRoutes = require('./routes/walletRoutes');
+const netsRoutes = require('./routes/netsRoutes');
 const { exposeUser, checkAuthenticated } = require('./middleware/auth');
 const paypal = require('./services/paypal');
+const stripe = require('./services/stripe');
 const { computeTotals } = require('./services/orderTotals');
 
 const app = express();
@@ -45,6 +48,8 @@ app.use(userRoutes);
 app.use(cartRoutes);
 app.use(orderRoutes);
 app.use(adminRoutes);
+app.use(walletRoutes);
+app.use(netsRoutes);
 
 // PayPal: Create Order
 app.post('/api/paypal/create-order', checkAuthenticated, async (req, res) => {
@@ -80,6 +85,23 @@ app.post('/api/paypal/capture-order', checkAuthenticated, async (req, res) => {
     return res.status(400).json({ error: 'Payment not completed', details: capture });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to capture PayPal order', message: err.message });
+  }
+});
+
+// Stripe: Create PaymentIntent (Card payments)
+app.post('/api/stripe/create-payment-intent', checkAuthenticated, async (req, res) => {
+  try {
+    const cart = req.session.cart || [];
+    if (!cart.length) {
+      return res.status(400).json({ error: 'Cart is empty' });
+    }
+    const promoAmount = Number(req.session.promoAmount || 0);
+    const promoApplied = promoAmount > 0 ? { amount: promoAmount } : null;
+    const totals = computeTotals(cart, promoApplied);
+    const intent = await stripe.createPaymentIntent(totals.total);
+    return res.json({ clientSecret: intent.client_secret, id: intent.id });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to create Stripe PaymentIntent', message: err.message });
   }
 });
 

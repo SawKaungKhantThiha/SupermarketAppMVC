@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link href="/theme.css" rel="stylesheet">
+  <script src="https://unpkg.com/event-source-polyfill"></script>
+  <style>
+    body {
+      background-image: url('/images/bg.png');
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      background-color: #111213;
+      color: #fff;
+      font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    body::before { content:''; position:fixed; inset:0; background:rgba(0,0,0,0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events:none; z-index:-1; }
+    .qr-card { max-width: 560px; margin: 5vh auto; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 18px 40px rgba(0,0,0,0.4); }
+    .qr-img { width: 240px; height: 240px; object-fit: contain; background:#fff; border-radius: 8px; padding: 12px; }
+    .status { color: rgba(255,255,255,0.8); margin-bottom: 12px; }
+    .timer { font-weight: 600; }
+    .nets-logo { width: 140px; margin: 8px auto 16px; }
+    .btn-link { display: inline-block; margin-top: 16px; color: #fff; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="qr-card">
+    <img class="nets-logo" src="/images/netsQrLogo.png" alt="NETS QR" />
+    <h2>Scan to Pay</h2>
+    <p class="status" id="status">Scan with your bank simulator app to complete payment.</p>
+    <img class="qr-img" src="<%= qrCodeUrl %>" alt="NETS QR Code">
+    <p class="timer" id="timer">Time remaining: 5:00</p>
+    <img height="auto" width="70%" src="/images/netsQrInfo.png" alt="NETS QR info" />
+    <br>
+    <a class="btn-link" href="/checkout">Cancel</a>
+  </div>
+
+  <script>
+    let s2sNetsTxnStatus;
+    if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
+
+    const txnRetrievalRef = "<%= txnRetrievalRef %>";
+    const url = `/sse/payment-status/${txnRetrievalRef}`;
+    s2sNetsTxnStatus = new EventSourcePolyfill(url, { heartbeatTimeout: 150000 });
+
+    s2sNetsTxnStatus.addEventListener("message", (event) => {
+      const data = JSON.parse(event.data);
+      if (data.success) {
+        if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
+        window.location.href = `/nets-qr/success?txn_retrieval_ref=${txnRetrievalRef}`;
+      } else if (data.fail) {
+        if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
+        window.location.href = `/nets-qr/fail?txn_retrieval_ref=${txnRetrievalRef}`;
+      }
+    });
+
+    const timerElement = document.getElementById("timer");
+    const countdownDuration = <%= timer || 300 %>;
+    let remainingTime = countdownDuration;
+
+    const updateTimer = () => {
+      const minutes = Math.floor(remainingTime / 60);
+      const seconds = remainingTime % 60;
+      timerElement.textContent = `Time remaining: ${minutes}:${seconds.toString().padStart(2, "0")}`;
+      remainingTime -= 1;
+
+      if (remainingTime < 0) {
+        clearInterval(timerInterval);
+        timerElement.textContent = "Transaction timed out.";
+        if (s2sNetsTxnStatus) s2sNetsTxnStatus.close();
+        window.location.href = `/nets-qr/fail?txn_retrieval_ref=${txnRetrievalRef}`;
+      }
+    };
+
+    const timerInterval = setInterval(updateTimer, 1000);
+    updateTimer();
+  </script>
+</body>
+</html>

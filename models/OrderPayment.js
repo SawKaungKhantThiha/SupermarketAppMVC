@@ -5,8 +5,8 @@ const OrderPayment = {
     if (!paymentInfo) return callback(null);
     const sql = `
       INSERT INTO order_payments
-        (orderId, method, cardName, cardLast4, paypalOrderId, paypalCaptureId, promoCode, promoAmount, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        (orderId, method, cardName, cardLast4, paypalOrderId, paypalCaptureId, cryptoTxHash, cryptoChain, cryptoFrom, stripePaymentIntentId, promoCode, promoAmount, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `;
     const params = [
       orderId,
@@ -15,6 +15,10 @@ const OrderPayment = {
       paymentInfo.cardLast4 || null,
       paymentInfo.paypalOrderId || null,
       paymentInfo.paypalCaptureId || null,
+      paymentInfo.cryptoTxHash || null,
+      paymentInfo.cryptoChain || null,
+      paymentInfo.cryptoFrom || null,
+      paymentInfo.stripePaymentIntentId || null,
       paymentInfo.promo && paymentInfo.promo.code ? paymentInfo.promo.code : null,
       paymentInfo.promo && paymentInfo.promo.amount != null ? paymentInfo.promo.amount : null
     ];
@@ -23,7 +27,7 @@ const OrderPayment = {
 
   getByOrderId(orderId, callback) {
     const sql = `
-      SELECT id, orderId, method, cardName, cardLast4, paypalOrderId, paypalCaptureId, promoCode, promoAmount, createdAt
+      SELECT id, orderId, method, cardName, cardLast4, paypalOrderId, paypalCaptureId, cryptoTxHash, cryptoChain, cryptoFrom, stripePaymentIntentId, promoCode, promoAmount, createdAt
       FROM order_payments
       WHERE orderId = ?
       LIMIT 1

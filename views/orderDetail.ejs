@@ -48,6 +48,7 @@
         <ul class="navbar-nav ms-auto">
           <li class="nav-item d-flex align-items-center me-3"><span class="text-light small">Signed in as <strong><%= user.username %></strong></span></li>
           <li class="nav-item"><a class="btn btn-outline-light btn-sm btn-cta btn-minimal" href="/orders">Back to Orders</a></li>
+          <li class="nav-item ms-2"><a class="btn btn-outline-light btn-sm btn-cta btn-minimal" href="/wallet">Wallet</a></li>
           <li class="nav-item ms-2"><a class="btn btn-outline-light btn-sm btn-cta btn-minimal" href="/logout">Logout</a></li>
         </ul>
       </div>
@@ -90,6 +91,15 @@
           <% } %>
           <% if (paymentInfoSafe.cardLast4) { %>
             <div class="text-white-50 small">Card ending •••• <%= paymentInfoSafe.cardLast4 %></div>
+          <% } %>
+          <% if (paymentInfoSafe.cryptoTxHash) { %>
+            <div class="text-white-50 small">Tx hash: <%= paymentInfoSafe.cryptoTxHash %></div>
+          <% } %>
+          <% if (paymentInfoSafe.cryptoChain) { %>
+            <div class="text-white-50 small">Network: <%= paymentInfoSafe.cryptoChain %></div>
+          <% } %>
+          <% if (paymentInfoSafe.stripePaymentIntentId) { %>
+            <div class="text-white-50 small">Stripe PI: <%= paymentInfoSafe.stripePaymentIntentId %></div>
           <% } %>
         <% } else { %>
           <div class="text-white-50 small">Payment details not captured (demo checkout).</div>

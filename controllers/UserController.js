@@ -1,10 +1,15 @@
+const db = require('../db');
+const { generateOtp, hashOtp } = require('../services/otp');
+const { sendOtpEmail } = require('../services/email');
+
+const OTP_EXP_MINUTES = 10;
+
 const UserController = {
   registerForm(req, res) {
     res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
   },
 
-  register(req, res) {
-    const db = require('../db');
+  async register(req, res) {
     const { username, email, password, address, contact } = req.body;
     const role = 'user';
 
@@ -19,15 +24,28 @@ const UserController = {
       return res.redirect('/register');
     }
 
-    const sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
-    db.query(sql, [username, email, password, address, contact, role], (err, result) => {
+    const otp = generateOtp(6);
+    const otpHash = hashOtp(otp);
+    const otpExpiresAt = new Date(Date.now() + OTP_EXP_MINUTES * 60 * 1000);
+
+    const sql = `
+      INSERT INTO users (username, email, password, address, contact, role, is_verified, otp_hash, otp_expires_at)
+      VALUES (?, ?, SHA1(?), ?, ?, ?, 0, ?, ?)
+    `;
+    db.query(sql, [username, email, password, address, contact, role, otpHash, otpExpiresAt], async (err, result) => {
       if (err) {
         console.error('Error registering user:', err);
         req.flash('error', 'Registration failed. Try again.');
         return res.redirect('/register');
       }
-      req.flash('success', 'Registration successful! Please log in.');
-      return res.redirect('/login');
+      try {
+        await sendOtpEmail(email, otp);
+      } catch (mailErr) {
+        console.error('Error sending OTP email:', mailErr);
+      }
+      req.session.pendingVerification = { userId: result.insertId, email };
+      req.flash('success', 'We sent an OTP to your email. Enter it to verify your account.');
+      return res.redirect('/verify-otp');
     });
   },
 
@@ -36,7 +54,6 @@ const UserController = {
   },
 
   login(req, res) {
-    const db = require('../db');
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -56,10 +73,116 @@ const UserController = {
         return res.redirect('/login');
       }
 
-      req.session.user = results[0];
+      const user = results[0];
+      if (user.is_verified === 0 || user.is_verified === '0') {
+        req.session.pendingVerification = { userId: user.id, email: user.email };
+        req.flash('error', 'Please verify your account with the OTP sent to your email.');
+        return res.redirect('/verify-otp');
+      }
+
+      req.session.user = user;
       req.flash('success', `Welcome back, ${req.session.user.username}!`);
-      // Always land on homepage after login (admin redirects to dashboard there)
       return res.redirect('/');
+    });
+  },
+
+  verifyOtpForm(req, res) {
+    res.render('verifyOtp', {
+      messages: req.flash('success'),
+      errors: req.flash('error'),
+      email: req.session.pendingVerification ? req.session.pendingVerification.email : ''
+    });
+  },
+
+  verifyOtp(req, res) {
+    const { otp } = req.body;
+    const pending = req.session.pendingVerification;
+    if (!pending || !pending.userId) {
+      req.flash('error', 'No verification session found. Please log in again.');
+      return res.redirect('/login');
+    }
+    if (!otp || String(otp).trim().length < 4) {
+      req.flash('error', 'Please enter a valid OTP.');
+      return res.redirect('/verify-otp');
+    }
+
+    const otpHash = hashOtp(otp);
+    const sql = `
+      SELECT id, email, otp_hash, otp_expires_at
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `;
+    db.query(sql, [pending.userId], (err, rows) => {
+      if (err) {
+        console.error('Error verifying OTP:', err);
+        req.flash('error', 'Verification failed. Try again.');
+        return res.redirect('/verify-otp');
+      }
+      const user = rows && rows[0] ? rows[0] : null;
+      if (!user || user.email !== pending.email) {
+        req.flash('error', 'Verification session mismatch.');
+        return res.redirect('/verify-otp');
+      }
+      if (!user.otp_hash || !user.otp_expires_at) {
+        req.flash('error', 'OTP not found. Please request a new code.');
+        return res.redirect('/verify-otp');
+      }
+      const expiresAt = new Date(user.otp_expires_at);
+      if (Number.isNaN(expiresAt.getTime()) || expiresAt < new Date()) {
+        req.flash('error', 'OTP has expired. Please request a new code.');
+        return res.redirect('/verify-otp');
+      }
+      if (user.otp_hash !== otpHash) {
+        req.flash('error', 'Incorrect OTP. Please try again.');
+        return res.redirect('/verify-otp');
+      }
+
+      const updateSql = `
+        UPDATE users
+        SET is_verified = 1, otp_hash = NULL, otp_expires_at = NULL
+        WHERE id = ?
+      `;
+      db.query(updateSql, [pending.userId], (updateErr) => {
+        if (updateErr) {
+          console.error('Error updating verification status:', updateErr);
+          req.flash('error', 'Verification failed. Try again.');
+          return res.redirect('/verify-otp');
+        }
+        req.session.pendingVerification = null;
+        req.flash('success', 'Email verified. Please log in.');
+        return res.redirect('/login');
+      });
+    });
+  },
+
+  resendOtp(req, res) {
+    const pending = req.session.pendingVerification;
+    if (!pending || !pending.userId) {
+      req.flash('error', 'No verification session found. Please log in again.');
+      return res.redirect('/login');
+    }
+    const otp = generateOtp(6);
+    const otpHash = hashOtp(otp);
+    const otpExpiresAt = new Date(Date.now() + OTP_EXP_MINUTES * 60 * 1000);
+    const updateSql = `
+      UPDATE users
+      SET otp_hash = ?, otp_expires_at = ?
+      WHERE id = ?
+    `;
+    db.query(updateSql, [otpHash, otpExpiresAt, pending.userId], async (err) => {
+      if (err) {
+        console.error('Error resending OTP:', err);
+        req.flash('error', 'Could not resend OTP. Try again.');
+        return res.redirect('/verify-otp');
+      }
+      try {
+        await sendOtpEmail(pending.email, otp);
+      } catch (mailErr) {
+        console.error('Error sending OTP email:', mailErr);
+      }
+      req.flash('success', 'A new OTP was sent to your email.');
+      return res.redirect('/verify-otp');
     });
   },
 

@@ -3,6 +3,8 @@ const Product = require('../models/Product');
 const db = require('../db');
 const { GST_RATE, DELIVERY_RATE, computeTotals } = require('../services/orderTotals');
 const OrderPayment = require('../models/OrderPayment');
+const Wallet = require('../models/Wallet');
+const stripe = require('../services/stripe');
 
 const validatePromo = (code, subtotal, callback) => {
   if (!code) return callback(null, null);
@@ -43,19 +45,26 @@ const OrderController = {
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const renderPage = (promoApplied) => {
       const totals = computeTotals(cart, promoApplied);
-      res.render('checkout', {
-        cart,
-        subtotal: totals.subtotal,
-        discount: totals.promoAmount,
-        gst: totals.gst,
-        deliveryFee: totals.deliveryFee,
-        total: totals.total,
-        gstRate: GST_RATE,
-        deliveryRate: DELIVERY_RATE,
-        user,
-        messages: req.flash('error'),
-        promoApplied,
-        paypalClientId: process.env.PAYPAL_CLIENT_ID || ''
+      Wallet.getBalance(user.id, (err, walletBalance) => {
+        if (err) console.error('Error fetching wallet balance:', err);
+        res.render('checkout', {
+          cart,
+          subtotal: totals.subtotal,
+          discount: totals.promoAmount,
+          gst: totals.gst,
+          deliveryFee: totals.deliveryFee,
+          total: totals.total,
+          gstRate: GST_RATE,
+          deliveryRate: DELIVERY_RATE,
+          user,
+          messages: req.flash('error'),
+          promoApplied,
+          walletBalance: err ? 0 : walletBalance,
+          paypalClientId: process.env.PAYPAL_CLIENT_ID || '',
+          stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+          ethRate: process.env.ETH_SGD_RATE || '',
+          metamaskAddress: process.env.METAMASK_MERCHANT_ADDRESS || ''
+        });
       });
     };
 
@@ -91,45 +100,120 @@ const OrderController = {
     const cardLast4 = cardNumberRaw ? cardNumberRaw.slice(-4) : null;
     const paypalOrderId = (req.body.paypalOrderId || '').trim();
     const paypalCaptureId = (req.body.paypalCaptureId || '').trim();
+    const metamaskTxHash = (req.body.metamaskTxHash || '').trim();
+    const metamaskFrom = (req.body.metamaskFrom || '').trim();
+    const stripePaymentIntentId = (req.body.stripePaymentIntentId || '').trim();
     if (!cart.length) {
       req.flash('error', 'Your cart is empty.');
       return res.redirect('/shopping');
+    }
+    if (paymentMethod === 'metamask' && !metamaskTxHash) {
+      req.flash('error', 'Missing MetaMask transaction hash.');
+      return res.redirect('/checkout');
+    }
+    if (paymentMethod === 'stripe-card' && !stripePaymentIntentId) {
+      req.flash('error', 'Missing Stripe PaymentIntent.');
+      return res.redirect('/checkout');
     }
 
     const promoCode = req.session.promoCode || null;
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    const finalizeOrder = (promoApplied) => {
+    const finalizeOrder = async (promoApplied) => {
       const totals = computeTotals(cart, promoApplied);
       const orderData = { userId: user.id, total: totals.total, address: address || null };
+      const walletRef = paymentMethod === 'wallet'
+        ? `WALLET-CHECKOUT-${user.id}-${Date.now()}`
+        : null;
 
-      Order.create(orderData, cart, (err, result) => {
-        if (err) {
-          console.error('Error creating order:', err);
-          req.flash('error', err.message || 'Could not place order, please try again.');
+      if (paymentMethod === 'stripe-card') {
+        try {
+          const intent = await stripe.getPaymentIntent(stripePaymentIntentId);
+          const expected = Math.round(Number(totals.total) * 100);
+          if (intent.currency !== 'sgd') {
+            req.flash('error', 'Stripe payment currency mismatch.');
+            return res.redirect('/checkout');
+          }
+          if (intent.status !== 'succeeded') {
+            req.flash('error', 'Stripe payment not completed.');
+            return res.redirect('/checkout');
+          }
+          const received = Number(intent.amount_received || intent.amount || 0);
+          if (received < expected) {
+            req.flash('error', 'Stripe payment amount is less than required.');
+            return res.redirect('/checkout');
+          }
+        } catch (err) {
+          console.error('Stripe verification error:', err);
+          req.flash('error', 'Stripe verification failed. Please try again.');
           return res.redirect('/checkout');
         }
-        req.session.orderPayments = req.session.orderPayments || {};
-        const storedPaymentMethod = paymentMethod === 'cash'
-          ? 'Cash on Delivery'
-          : (paymentMethod === 'paypal' ? 'PayPal' : 'Card');
+      }
+
+      const handleCreate = () => {
+        Order.create(orderData, cart, (err, result) => {
+          if (err) {
+            console.error('Error creating order:', err);
+            if (paymentMethod === 'wallet') {
+              Wallet.credit(user.id, totals.total, `${walletRef}-REV`, 'refund', (refundErr) => {
+                if (refundErr) console.error('Error refunding wallet after failed order:', refundErr);
+              });
+            }
+            req.flash('error', err.message || 'Could not place order, please try again.');
+            return res.redirect('/checkout');
+          }
+          req.session.orderPayments = req.session.orderPayments || {};
+          let storedPaymentMethod = 'Card';
+        if (paymentMethod === 'cash') {
+          storedPaymentMethod = 'Cash on Delivery';
+        } else if (paymentMethod === 'paypal') {
+          storedPaymentMethod = 'PayPal';
+        } else if (paymentMethod === 'wallet') {
+          storedPaymentMethod = 'Wallet';
+        } else if (paymentMethod === 'metamask') {
+          storedPaymentMethod = 'MetaMask (Sepolia)';
+        } else if (paymentMethod === 'stripe-card') {
+          storedPaymentMethod = 'Stripe Card';
+        }
         const paymentInfo = {
           method: storedPaymentMethod,
           cardName: storedPaymentMethod === 'Card' ? cardName || null : null,
           cardLast4: storedPaymentMethod === 'Card' ? cardLast4 : null,
           paypalOrderId: storedPaymentMethod === 'PayPal' ? paypalOrderId || null : null,
           paypalCaptureId: storedPaymentMethod === 'PayPal' ? paypalCaptureId || null : null,
+          cryptoTxHash: storedPaymentMethod === 'MetaMask (Sepolia)' ? metamaskTxHash || null : null,
+          cryptoFrom: storedPaymentMethod === 'MetaMask (Sepolia)' ? metamaskFrom || null : null,
+          cryptoChain: storedPaymentMethod === 'MetaMask (Sepolia)' ? 'sepolia' : null,
+          stripePaymentIntentId: storedPaymentMethod === 'Stripe Card' ? stripePaymentIntentId || null : null,
           promo: promoApplied ? { code: promoApplied.code, amount: promoApplied.amount } : null
         };
-        req.session.orderPayments[result.orderId] = paymentInfo;
-        OrderPayment.create(result.orderId, paymentInfo, (err) => {
-          if (err) console.error('Error saving order payment:', err);
-          req.session.cart = [];
-          req.session.promoCode = null;
-          req.session.promoAmount = null;
+          req.session.orderPayments[result.orderId] = paymentInfo;
+          OrderPayment.create(result.orderId, paymentInfo, (err) => {
+            if (err) console.error('Error saving order payment:', err);
+            req.session.cart = [];
+            req.session.promoCode = null;
+            req.session.promoAmount = null;
           return res.redirect(`/orders/${result.orderId}`);
         });
       });
+    };
+
+      if (paymentMethod === 'wallet') {
+        return Wallet.charge(user.id, totals.total, walletRef, (err) => {
+          if (err) {
+            if (err.code === 'INSUFFICIENT_FUNDS') {
+              req.flash('error', 'Insufficient wallet balance.');
+            } else {
+              console.error('Wallet payment error:', err);
+              req.flash('error', 'Wallet payment failed. Please try again.');
+            }
+            return res.redirect('/checkout');
+          }
+          return handleCreate();
+        });
+      }
+
+      return handleCreate();
     };
 
     if (promoCode) {
@@ -138,17 +222,33 @@ const OrderController = {
           console.error('Error validating promo during checkout:', err);
           req.flash('error', 'Could not validate promo code.');
           req.session.promoCode = null;
-          return finalizeOrder(null);
+          return finalizeOrder(null).catch((err) => {
+            console.error('Error finalizing order:', err);
+            req.flash('error', 'Could not place order. Please try again.');
+            return res.redirect('/checkout');
+          });
         }
         if (!promo) {
           req.flash('error', 'Promo code is invalid or expired.');
           req.session.promoCode = null;
-          return finalizeOrder(null);
+          return finalizeOrder(null).catch((err) => {
+            console.error('Error finalizing order:', err);
+            req.flash('error', 'Could not place order. Please try again.');
+            return res.redirect('/checkout');
+          });
         }
-        finalizeOrder(promo);
+        finalizeOrder(promo).catch((err) => {
+          console.error('Error finalizing order:', err);
+          req.flash('error', 'Could not place order. Please try again.');
+          return res.redirect('/checkout');
+        });
       });
     } else {
-      finalizeOrder(null);
+      finalizeOrder(null).catch((err) => {
+        console.error('Error finalizing order:', err);
+        req.flash('error', 'Could not place order. Please try again.');
+        return res.redirect('/checkout');
+      });
     }
   },
 
@@ -164,10 +264,10 @@ const OrderController = {
       const decorated = (orders || []).map(order => {
         const createdAt = new Date(order.createdAt);
         const withinWindow = now - createdAt.getTime() <= refundWindowMs;
-        const isPaypal = order.paymentMethod === 'PayPal';
+        const isRefundableMethod = order.paymentMethod === 'PayPal' || order.paymentMethod === 'Wallet';
         return {
           ...order,
-          refundEligible: withinWindow && isPaypal,
+          refundEligible: withinWindow && isRefundableMethod,
           refundStatus: order.refundStatus || null
         };
       });
